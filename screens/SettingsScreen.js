@@ -58,7 +58,7 @@ export default function SettingsScreen() {
     try {
       setSaving(true);
       await SettingsService.save(settings);
-      Alert.alert('Saved', 'Shop settings saved successfully!');
+      Alert.alert('Saved', 'Mandal settings saved successfully!');
     } catch (error) {
       Alert.alert('Error', error.message);
     } finally {
@@ -98,11 +98,11 @@ export default function SettingsScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>⚙️ Settings</Text>
-        <Text style={styles.headerSub}>Shop info used on every receipt</Text>
+        <Text style={styles.headerSub}>Mandal info used on every receipt</Text>
       </View>
 
       {/* Logo */}
-      <Text style={styles.sectionTitle}>Shop Logo</Text>
+      <Text style={styles.sectionTitle}>Logo</Text>
       <View style={styles.card}>
         {settings.logoUri ? (
           <View style={styles.logoContainer}>
@@ -143,7 +143,7 @@ export default function SettingsScreen() {
       </View>
 
       {/* Shop Info */}
-      <Text style={styles.sectionTitle}>Shop Information</Text>
+      <Text style={styles.sectionTitle}>Mandal Information</Text>
       <View style={styles.card}>
         <Text style={styles.label}>Mandal Name</Text>
         <TextInput
@@ -167,7 +167,7 @@ export default function SettingsScreen() {
           style={[styles.input, styles.inputMultiline]}
           value={settings.shopAddress}
           onChangeText={v => update('shopAddress', v)}
-          placeholder="Enter shop address"
+          placeholder="Enter mandal address"
           multiline
           numberOfLines={2}
         />

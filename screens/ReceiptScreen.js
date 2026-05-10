@@ -106,7 +106,7 @@ export default function ReceiptScreen() {
     encoder
       .align('center')
       .bold(true).size('double')
-      .text('SRKVM Kits').newline()
+      .text('SRKVM KITS').newline()
       .size('normal')
       .text(`${mandal} Mandal`).newline()
       .bold(false)
@@ -183,7 +183,7 @@ export default function ReceiptScreen() {
   // ── Validate before print ──────────────────────────────
   const validateAndAskCopies = (type) => {
     if (!selectedSchool) {
-      Alert.alert('స్కూల్ select చేయండి', 'ముందు స్కూల్ select చేయండి.');
+      Alert.alert('స్కూల్ select చేయండి', 'ముందు స్కూల్ సెలెక్ట్ చేయండి.');
       return;
     }
     if (checkedItems.length === 0) {
@@ -219,7 +219,7 @@ export default function ReceiptScreen() {
         }
 
         await ReceiptHistory.save({
-          shopName:  `SRKVM Kits - ${settings?.shopName || ''} Mandal`,
+          shopName:  `SRKVM KITS - ${settings?.shopName || ''} Mandal`,
           shopPhone: settings?.shopPhone || '',
           school:    selectedSchool,
           spell:     spellNumber,

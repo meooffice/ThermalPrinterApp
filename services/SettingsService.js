@@ -4,10 +4,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const SETTINGS_KEY = 'shop_settings';
 
 const DEFAULT_SETTINGS = {
-  shopName:    'My Shop',
+  shopName:    'Kotananduru',
   shopPhone:   '9999999999',
-  shopAddress: 'Hyderabad, Telangana',
-  shopTagline: 'Thank you! Visit Again.',
+  shopAddress: 'Kakinada, AP',
+  shopTagline: 'Check your items now',
   logoUri:     null,
   paperWidth:  32, // characters per line for 58mm
 };
