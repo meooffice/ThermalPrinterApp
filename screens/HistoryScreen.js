@@ -1,28 +1,22 @@
 // screens/HistoryScreen.js
 import React, { useState, useCallback } from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  ActivityIndicator,
+  View, Text, FlatList, TouchableOpacity, StyleSheet,
+  Alert, ActivityIndicator, SafeAreaView,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import ReceiptHistory from '../services/ReceiptHistory';
 import BluetoothService from '../services/BluetoothService';
 import EscPosEncoder from '../services/EscPosEncoder';
+import SettingsService from '../services/SettingsService';
 
 export default function HistoryScreen() {
   const [history, setHistory]   = useState([]);
   const [loading, setLoading]   = useState(true);
-  const [printing, setPrinting] = useState(null); // receipt id
+  const [printing, setPrinting] = useState(null);
 
   useFocusEffect(
-    useCallback(() => {
-      loadHistory();
-    }, [])
+    useCallback(() => { loadHistory(); }, [])
   );
 
   const loadHistory = async () => {
@@ -33,134 +27,136 @@ export default function HistoryScreen() {
   };
 
   const handleDelete = (id) => {
-    Alert.alert(
-      'Delete Receipt',
-      'Remove this receipt from history?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            await ReceiptHistory.delete(id);
-            loadHistory();
-          },
+    Alert.alert('Delete', 'Receipt delete చేయాలా?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive',
+        onPress: async () => {
+          await ReceiptHistory.delete(id);
+          loadHistory();
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const handleReprint = async (receipt) => {
     try {
       const connected = await BluetoothService.isConnected();
       if (!connected) {
-        Alert.alert('Not Connected', 'Please connect to your printer first.');
+        Alert.alert('Not Connected', 'Printer connect చేయండి.');
         return;
       }
       setPrinting(receipt.id);
-      const encoder = new EscPosEncoder();
+      const settings = await SettingsService.get();
+      const encoder  = new EscPosEncoder();
+      const width    = settings?.paperWidth || 32;
 
-      encoder.initialize();
-
-      // Header
-      encoder.align('center')
+      encoder.initialize()
+        .align('center')
         .bold(true).size('double')
-        .text(receipt.shopName).newline()
-        .size('normal').bold(false)
-        .text(receipt.shopPhone).newline()
-        .divider('=')
+        .text('SRKVM Kits').newline()
+        .size('normal')
+        .text(`${settings?.shopName || ''} Mandal`).newline()
+        .bold(false)
+        .divider('=', width)
         .align('left');
 
-      // Original date
       const date = new Date(receipt.savedAt);
       encoder
-        .text(`Date: ${date.toLocaleDateString()}  ${date.toLocaleTimeString()}`)
-        .newline()
-        .text('*** REPRINT ***').newline()
-        .divider();
+        .text(`Date : ${date.toLocaleDateString()}`).newline()
+        .text(`Time : ${date.toLocaleTimeString()}`).newline()
+        .bold(true)
+        .text(`Spell: Spell ${receipt.spell || 1}`).newline()
+        .bold(false)
+        .divider('-', width);
 
-      // Items
-      encoder.bold(true).row('Item', 'Qty  Total').bold(false).divider();
-      receipt.items.forEach(item => {
-        const total = (
-          parseFloat(item.qty || 0) * parseFloat(item.price || 0)
-        ).toFixed(2);
-        encoder.row(item.name.substring(0, 16), `${item.qty}x  ${total}`);
+      if (receipt.school) {
+        encoder.bold(true).text('School:').bold(false).newline()
+          .text(receipt.school.name || '').newline();
+        if (receipt.school.udise) {
+          encoder.text(`UDISE : ${receipt.school.udise}`).newline();
+        }
+      }
+
+      encoder.divider('-', width);
+      const countCol = 6;
+      const nameCol  = width - countCol - 1;
+      encoder.bold(true)
+        .text('Item'.padEnd(nameCol) + 'Count').newline()
+        .bold(false).divider('-', width);
+
+      (receipt.items || []).forEach(item => {
+        const name  = (item.name || '').substring(0, nameCol).padEnd(nameCol);
+        const count = String(item.count || 0).padStart(countCol);
+        encoder.text(name + count).newline();
       });
 
-      // Totals
-      const subtotal = receipt.items.reduce(
-        (sum, item) =>
-          sum + parseFloat(item.qty || 0) * parseFloat(item.price || 0),
-        0
+      const totalQty = (receipt.items || []).reduce(
+        (sum, i) => sum + parseInt(i.count || 0), 0
       );
-      const tax   = (subtotal * parseFloat(receipt.tax || 0)) / 100;
-      const total = subtotal + tax;
 
-      encoder.divider()
-        .row('Subtotal', `Rs.${subtotal.toFixed(2)}`)
-        .row(`Tax (${receipt.tax}%)`, `Rs.${tax.toFixed(2)}`)
-        .bold(true).row('TOTAL', `Rs.${total.toFixed(2)}`).bold(false)
-        .divider()
+      encoder.divider('-', width)
+        .row('Total Items :', String((receipt.items || []).length), width)
+        .bold(true)
+        .row('Total Qty   :', String(totalQty), width)
+        .bold(false)
+        .divider('=', width)
         .align('center')
-        .text(receipt.footer).newline()
-        .newline(3)
-        .cut();
+        .text(settings?.shopTagline || 'Thank you!').newline()
+        .newline(3).cut();
 
       await BluetoothService.sendBase64(encoder.encodeBase64());
-      Alert.alert('Success', 'Receipt reprinted!');
+      Alert.alert('✅ Success', 'Reprinted successfully!');
     } catch (error) {
-      Alert.alert('Reprint Failed', error.message);
+      Alert.alert('❌ Failed', error.message);
     } finally {
       setPrinting(null);
     }
   };
 
   const handleClearAll = () => {
-    Alert.alert(
-      'Clear History',
-      'Delete all receipt history?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear All',
-          style: 'destructive',
-          onPress: async () => {
-            await ReceiptHistory.clear();
-            loadHistory();
-          },
+    Alert.alert('Clear All', 'All history delete చేయాలా?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear All', style: 'destructive',
+        onPress: async () => {
+          await ReceiptHistory.clear();
+          loadHistory();
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const formatDate = (iso) => {
     const d = new Date(iso);
-    return `${d.toLocaleDateString()}  ${d.toLocaleTimeString()}`;
-  };
-
-  const getTotal = (receipt) => {
-    const subtotal = receipt.items.reduce(
-      (sum, item) =>
-        sum + parseFloat(item.qty || 0) * parseFloat(item.price || 0),
-      0
-    );
-    return subtotal + (subtotal * parseFloat(receipt.tax || 0)) / 100;
+    return `${d.toLocaleDateString()} · ${d.toLocaleTimeString(
+      [], { hour: '2-digit', minute: '2-digit' }
+    )}`;
   };
 
   const renderItem = ({ item }) => (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
-        <View>
-          <Text style={styles.shopName}>{item.shopName}</Text>
+        <View style={styles.cardIconWrap}>
+          <Text style={{ fontSize: 20 }}>🏫</Text>
+        </View>
+        <View style={styles.cardInfo}>
+          <Text style={styles.schoolName}>
+            {item.school?.name || item.shopName || 'Receipt'}
+          </Text>
           <Text style={styles.dateText}>{formatDate(item.savedAt)}</Text>
         </View>
-        <Text style={styles.totalText}>Rs.{getTotal(item).toFixed(2)}</Text>
+        <View style={styles.spellBadge}>
+          <Text style={styles.spellBadgeText}>Spell {item.spell || 1}</Text>
+        </View>
       </View>
 
-      <Text style={styles.itemCount}>
-        {item.items.length} item{item.items.length !== 1 ? 's' : ''}
-      </Text>
+      <View style={styles.cardMeta}>
+        <Text style={styles.metaText}>
+          {(item.items || []).length} items ·{' '}
+          {(item.items || []).reduce((s, i) => s + parseInt(i.count || 0), 0)} qty
+        </Text>
+      </View>
 
       <View style={styles.cardActions}>
         <TouchableOpacity
@@ -171,15 +167,14 @@ export default function HistoryScreen() {
           {printing === item.id ? (
             <ActivityIndicator color="#4f46e5" size="small" />
           ) : (
-            <Text style={styles.reprintText}>🖨️ Reprint</Text>
+            <Text style={styles.reprintText}>🖨️  Reprint</Text>
           )}
         </TouchableOpacity>
-
         <TouchableOpacity
           style={styles.deleteBtn}
           onPress={() => handleDelete(item.id)}
         >
-          <Text style={styles.deleteText}>🗑️ Delete</Text>
+          <Text style={styles.deleteText}>🗑️  Delete</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -194,140 +189,100 @@ export default function HistoryScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.container}>
 
-      {/* Top bar */}
-      <View style={styles.topBar}>
-        <Text style={styles.screenTitle}>Receipt History</Text>
-        {history.length > 0 && (
-          <TouchableOpacity onPress={handleClearAll}>
-            <Text style={styles.clearText}>Clear All</Text>
-          </TouchableOpacity>
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.headerSub}>Printed receipts</Text>
+            <Text style={styles.headerTitle}>History</Text>
+          </View>
+          <View style={styles.headerRight}>
+            <View style={styles.headerIcon}>
+              <Text style={{ fontSize: 26 }}>📋</Text>
+            </View>
+            {history.length > 0 && (
+              <TouchableOpacity onPress={handleClearAll}>
+                <Text style={styles.clearText}>Clear All</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {history.length === 0 ? (
+          <View style={styles.centered}>
+            <Text style={{ fontSize: 52, marginBottom: 16 }}>📋</Text>
+            <Text style={styles.emptyTitle}>No history yet</Text>
+            <Text style={styles.emptyHint}>
+              Print చేసిన తర్వాత ఇక్కడ కనిపిస్తుంది
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={history}
+            keyExtractor={item => item.id}
+            renderItem={renderItem}
+            contentContainerStyle={styles.list}
+            showsVerticalScrollIndicator={false}
+          />
         )}
       </View>
-
-      {history.length === 0 ? (
-        <View style={styles.centered}>
-          <Text style={styles.emptyIcon}>🧾</Text>
-          <Text style={styles.emptyText}>No receipts yet</Text>
-          <Text style={styles.emptyHint}>
-            Printed receipts will appear here
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={history}
-          keyExtractor={item => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={{ paddingBottom: 20 }}
-        />
-      )}
-
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8f8f8',
-    padding: 16,
+  safe: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, padding: 20, paddingTop: 52 },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  header: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 20,
   },
-  topBar: {
-    flexDirection:  'row',
-    justifyContent: 'space-between',
-    alignItems:     'center',
-    marginTop:      20,
-    marginBottom:   16,
+  headerSub: { fontSize: 12, color: '#6b7280', marginBottom: 2 },
+  headerTitle: { fontSize: 28, fontWeight: '800', color: '#1e1b4b' },
+  headerRight: { alignItems: 'flex-end', gap: 6 },
+  headerIcon: {
+    width: 52, height: 52, backgroundColor: '#ede9fe',
+    borderRadius: 16, alignItems: 'center', justifyContent: 'center',
   },
-  screenTitle: {
-    fontSize:   22,
-    fontWeight: '800',
-    color:      '#1f2937',
-  },
-  clearText: {
-    color:      '#ef4444',
-    fontWeight: '600',
-    fontSize:   14,
-  },
+  clearText: { fontSize: 12, color: '#ef4444', fontWeight: '600' },
+  list: { paddingBottom: 20 },
   card: {
-    backgroundColor: '#fff',
-    borderRadius:    12,
-    padding:         14,
-    marginBottom:    10,
-    elevation:       1,
+    backgroundColor: '#fff', borderRadius: 16,
+    padding: 14, marginBottom: 10, elevation: 1,
+    borderWidth: 0.5, borderColor: '#f0f0f0',
   },
   cardHeader: {
-    flexDirection:  'row',
-    justifyContent: 'space-between',
-    alignItems:     'flex-start',
-    marginBottom:   4,
+    flexDirection: 'row', alignItems: 'center',
+    gap: 10, marginBottom: 8,
   },
-  shopName: {
-    fontSize:   15,
-    fontWeight: '700',
-    color:      '#111827',
+  cardIconWrap: {
+    width: 40, height: 40, backgroundColor: '#ede9fe',
+    borderRadius: 12, alignItems: 'center', justifyContent: 'center',
   },
-  dateText: {
-    fontSize:  12,
-    color:     '#6b7280',
-    marginTop:  2,
+  cardInfo: { flex: 1 },
+  schoolName: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  dateText: { fontSize: 11, color: '#9ca3af', marginTop: 2 },
+  spellBadge: {
+    backgroundColor: '#ede9fe', paddingHorizontal: 10,
+    paddingVertical: 4, borderRadius: 10,
   },
-  totalText: {
-    fontSize:   16,
-    fontWeight: '800',
-    color:      '#4f46e5',
-  },
-  itemCount: {
-    fontSize:     13,
-    color:        '#9ca3af',
-    marginBottom: 12,
-  },
-  cardActions: {
-    flexDirection: 'row',
-    gap:           8,
-  },
+  spellBadgeText: { fontSize: 11, color: '#4f46e5', fontWeight: '700' },
+  cardMeta: { marginBottom: 10 },
+  metaText: { fontSize: 12, color: '#6b7280' },
+  cardActions: { flexDirection: 'row', gap: 8 },
   reprintBtn: {
-    flex:            1,
-    backgroundColor: '#ede9fe',
-    padding:         10,
-    borderRadius:    8,
-    alignItems:      'center',
+    flex: 1, backgroundColor: '#ede9fe', padding: 10,
+    borderRadius: 10, alignItems: 'center',
   },
-  reprintText: {
-    color:      '#4f46e5',
-    fontWeight: '600',
-    fontSize:   13,
-  },
+  reprintText: { color: '#4f46e5', fontWeight: '600', fontSize: 13 },
   deleteBtn: {
-    flex:            1,
-    backgroundColor: '#fee2e2',
-    padding:         10,
-    borderRadius:    8,
-    alignItems:      'center',
+    flex: 1, backgroundColor: '#fee2e2', padding: 10,
+    borderRadius: 10, alignItems: 'center',
   },
-  deleteText: {
-    color:      '#ef4444',
-    fontWeight: '600',
-    fontSize:   13,
-  },
-  centered: {
-    flex:           1,
-    justifyContent: 'center',
-    alignItems:     'center',
-  },
-  emptyIcon: {
-    fontSize:     48,
-    marginBottom: 12,
-  },
-  emptyText: {
-    fontSize:     18,
-    fontWeight:   '700',
-    color:        '#1f2937',
-    marginBottom:  4,
-  },
-  emptyHint: {
-    fontSize: 14,
-    color:    '#9ca3af',
-  },
+  deleteText: { color: '#ef4444', fontWeight: '600', fontSize: 13 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#1f2937', marginBottom: 6 },
+  emptyHint: { fontSize: 13, color: '#9ca3af', textAlign: 'center' },
 });
