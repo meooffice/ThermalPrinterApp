@@ -81,7 +81,7 @@ export default function SettingsScreen({ navigation }) {
         </View>
 
         {/* Logo */}
-        <Text style={styles.sectionTitle}>Shop Logo</Text>
+        <Text style={styles.sectionTitle}>Mandal Logo</Text>
         <View style={styles.card}>
           {settings.logoUri ? (
             <View style={styles.logoContainer}>
@@ -240,6 +240,7 @@ export default function SettingsScreen({ navigation }) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
+    height: 'auto',
     backgroundColor: '#f5f5f5',
   },
   container: { flex: 1 },
