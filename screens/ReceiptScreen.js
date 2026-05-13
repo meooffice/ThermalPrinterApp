@@ -6,7 +6,6 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
 import BluetoothService from '../services/BluetoothService';
 import EscPosEncoder from '../services/EscPosEncoder';
 import ReceiptHistory from '../services/ReceiptHistory';
@@ -14,26 +13,24 @@ import SettingsService from '../services/SettingsService';
 import SchoolService from '../services/SchoolService';
 import CatalogService from '../services/CatalogService';
 import ShareService from '../services/ShareService';
-import { Colors, Radius, Spacing, Shadow } from '../constants/Theme';
+import { Colors, Radius, Spacing, Typography } from '../theme';
+import { ScreenHeader, Card, Stepper } from '../components/ui';
 
 export default function ReceiptScreen() {
-  const [settings, setSettings]             = useState(null);
-  const [schools, setSchools]               = useState([]);
-  const [catalog, setCatalog]               = useState([]);
+  const [settings, setSettings]         = useState(null);
+  const [schools, setSchools]           = useState([]);
+  const [catalog, setCatalog]           = useState([]);
   const [selectedSchool, setSelectedSchool] = useState(null);
-  const [spellNumber, setSpellNumber]       = useState(1);
-  const [items, setItems]                   = useState([]);
-  const [printing, setPrinting]             = useState(false);
-  const [schoolModal, setSchoolModal]       = useState(false);
-  const [copiesModal, setCopiesModal]       = useState(false);
-  const [copies, setCopies]                 = useState('1');
-  const [pendingPrint, setPendingPrint]     = useState(null);
-  const [schoolSearch, setSchoolSearch]     = useState('');
-  const [permission, requestPermission]     = useCameraPermissions();
+  const [spellNumber, setSpellNumber]   = useState(1);
+  const [items, setItems]               = useState([]);
+  const [printing, setPrinting]         = useState(false);
+  const [schoolModal, setSchoolModal]   = useState(false);
+  const [copiesModal, setCopiesModal]   = useState(false);
+  const [copies, setCopies]             = useState(1);
+  const [pendingPrint, setPendingPrint] = useState(null);
+  const [schoolSearch, setSchoolSearch] = useState('');
 
-  useFocusEffect(
-    useCallback(() => { loadData(); }, [])
-  );
+  useFocusEffect(useCallback(() => { loadData(); }, []));
 
   const loadData = async () => {
     const s  = await SettingsService.get();
@@ -61,12 +58,8 @@ export default function ReceiptScreen() {
     setItems(checklist);
   };
 
-  const toggleItem   = (id) => setItems(prev => prev.map(i =>
-    i.id === id ? { ...i, checked: !i.checked } : i
-  ));
-  const updateCount  = (id, v) => setItems(prev => prev.map(i =>
-    i.id === id ? { ...i, count: v } : i
-  ));
+  const toggleItem  = (id) => setItems(prev => prev.map(i => i.id === id ? { ...i, checked: !i.checked } : i));
+  const updateCount = (id, v) => setItems(prev => prev.map(i => i.id === id ? { ...i, count: v } : i));
   const checkedItems = items.filter(i => i.checked);
   const getTotalQty  = () => checkedItems.reduce((s, i) => s + parseInt(i.count || 0), 0);
 
@@ -120,13 +113,13 @@ export default function ReceiptScreen() {
     if (!selectedSchool) { Alert.alert('స్కూల్ select చేయండి'); return; }
     if (checkedItems.length === 0) { Alert.alert('Items tick చేయండి'); return; }
     setPendingPrint(type);
-    setCopies('1');
+    setCopies(1);
     setCopiesModal(true);
   };
 
   const handlePrint = async () => {
     setCopiesModal(false);
-    const numCopies = parseInt(copies) || 1;
+    const numCopies = copies;
     if (pendingPrint === 'thermal') {
       try {
         const connected = await BluetoothService.isConnected();
@@ -169,66 +162,86 @@ export default function ReceiptScreen() {
   );
 
   if (!settings) {
-    return <View style={styles.centered}><ActivityIndicator size="large" color={Colors.primary} /></View>;
+    return (
+      <SafeAreaView style={styles.safe}>
+        <ScreenHeader title="Kit Distribution" subtitle="SRKVM Kits" />
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.headerSub}>SRKVM Kits · {settings.shopName} Mandal</Text>
-            <Text style={styles.headerTitle}>Kit Distribution</Text>
-          </View>
-          <View style={styles.headerIcon}>
-            <Text style={{ fontSize: 26 }}>🧾</Text>
-          </View>
-        </View>
+      {/* ── ui.js → ScreenHeader ── */}
+      <ScreenHeader
+        title="Kit Distribution"
+        subtitle={`SRKVM Kits · ${settings.shopName} Mandal`}
+      />
 
-        {/* School Selector */}
-        <Text style={styles.sectionTitle}>School</Text>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+
+        {/* ── School Selector ── */}
+        <Text style={styles.sectionTitle}>🏫  School</Text>
         <TouchableOpacity style={styles.schoolSelector} onPress={() => setSchoolModal(true)}>
-          {selectedSchool ? (
-            <View>
-              <Text style={styles.schoolSelectedName}>{selectedSchool.name}</Text>
-              {selectedSchool.udise ? <Text style={styles.schoolSelectedUdise}>UDISE: {selectedSchool.udise}</Text> : null}
+          <View style={styles.schoolSelectorLeft}>
+            <View style={styles.schoolSelectorIcon}>
+              <Text style={{ fontSize: 20 }}>🏫</Text>
             </View>
-          ) : (
-            <Text style={styles.schoolPlaceholder}>🏫  స్కూల్ select చేయండి...</Text>
-          )}
+            <View>
+              {selectedSchool ? (
+                <>
+                  <Text style={styles.schoolSelectedName}>{selectedSchool.name}</Text>
+                  {selectedSchool.udise
+                    ? <Text style={styles.schoolSelectedUdise}>UDISE: {selectedSchool.udise}</Text>
+                    : null}
+                </>
+              ) : (
+                <Text style={styles.schoolPlaceholder}>స్కూల్ select చేయండి...</Text>
+              )}
+            </View>
+          </View>
           <Text style={styles.arrow}>▼</Text>
         </TouchableOpacity>
 
-        {/* Spell */}
-        <Text style={styles.sectionTitle}>Distribution Spell</Text>
-        <View style={styles.card}>
+        {/* ── Distribution Spell ── ui.js → Card + Stepper ── */}
+        <Text style={styles.sectionTitle}>📋  Distribution Spell</Text>
+        <Card>
           <View style={styles.spellRow}>
-            <TouchableOpacity style={styles.spellBtn} onPress={() => setSpellNumber(Math.max(1, spellNumber - 1))}>
-              <Text style={styles.spellBtnText}>−</Text>
-            </TouchableOpacity>
-            <Text style={styles.spellValue}>Spell {spellNumber}</Text>
-            <TouchableOpacity style={styles.spellBtn} onPress={() => setSpellNumber(spellNumber + 1)}>
-              <Text style={styles.spellBtnText}>+</Text>
-            </TouchableOpacity>
+            <Text style={styles.spellLabel}>Spell Number</Text>
+            {/* ui.js → Stepper */}
+            <Stepper value={spellNumber} onChange={setSpellNumber} min={1} />
           </View>
-        </View>
+          <View style={styles.spellBadgeWrap}>
+            <View style={styles.spellBadge}>
+              <Text style={styles.spellBadgeText}>Spell {spellNumber}</Text>
+            </View>
+          </View>
+        </Card>
 
-        {/* Items Checklist */}
+        {/* ── Kit Items Checklist ── ui.js → Card ── */}
         <Text style={styles.sectionTitle}>
-          Kit Items {selectedSchool ? `— ${checkedItems.length} selected` : '— స్కూల్ select చేయండి'}
+          📦  Kit Items{selectedSchool ? `  —  ${checkedItems.length} selected` : ''}
         </Text>
 
         {catalog.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyText}>📦 Catalog లో items లేవు</Text>
+          <Card style={styles.emptyCard}>
+            <Text style={styles.emptyIcon}>📦</Text>
+            <Text style={styles.emptyText}>Catalog లో items లేవు</Text>
             <Text style={styles.emptyHint}>Settings → Item Catalog లో add చేయండి</Text>
-          </View>
+          </Card>
         ) : !selectedSchool ? (
-          <View style={styles.emptyCard}>
+          <Card style={styles.emptyCard}>
+            <Text style={styles.emptyIcon}>🏫</Text>
             <Text style={styles.emptyHint}>స్కూల్ select చేసిన తర్వాత checklist వస్తుంది</Text>
-          </View>
+          </Card>
         ) : (
           items.map(item => (
             <TouchableOpacity
@@ -250,17 +263,18 @@ export default function ReceiptScreen() {
                   onChangeText={v => updateCount(item.id, v)}
                   keyboardType="numeric"
                   placeholder="0"
+                  placeholderTextColor={Colors.textMuted}
                 />
               )}
             </TouchableOpacity>
           ))
         )}
 
-        {/* Summary */}
+        {/* ── Summary ── ui.js → Card ── */}
         {checkedItems.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Summary</Text>
-            <View style={styles.card}>
+            <Text style={styles.sectionTitle}>📊  Summary</Text>
+            <Card>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Selected Items</Text>
                 <Text style={styles.summaryValue}>{checkedItems.length}</Text>
@@ -269,55 +283,73 @@ export default function ReceiptScreen() {
                 <Text style={styles.totalLabel}>Total Quantity</Text>
                 <Text style={styles.totalValue}>{getTotalQty()}</Text>
               </View>
-            </View>
+            </Card>
           </>
         )}
 
-        {/* Print Buttons */}
+        {/* ── Print Button ── */}
         <TouchableOpacity
           style={[styles.printBtn, printing && styles.printBtnDisabled]}
           onPress={() => validateAndAskCopies('thermal')}
           disabled={printing}
         >
-          {printing ? <ActivityIndicator color="#fff" /> : (
-            <Text style={styles.printBtnText}>🖨️  Thermal Printer లో Print</Text>
-          )}
+          {printing
+            ? <ActivityIndicator color={Colors.primaryText} />
+            : (
+              <View style={styles.printBtnInner}>
+                <Text style={styles.printBtnIcon}>🖨️</Text>
+                <Text style={styles.printBtnText}>Thermal Printer లో Print</Text>
+              </View>
+            )}
         </TouchableOpacity>
 
+        {/* ── Share Row ── */}
         <View style={styles.shareRow}>
           <TouchableOpacity style={styles.shareBtn} onPress={() => validateAndAskCopies('pdf')}>
-            <Text style={styles.shareBtnText}>📄 PDF</Text>
+            <Text style={styles.shareBtnIcon}>📄</Text>
+            <Text style={styles.shareBtnText}>PDF</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.shareBtn} onPress={() => validateAndAskCopies('system')}>
-            <Text style={styles.shareBtnText}>🖨️ System</Text>
+            <Text style={styles.shareBtnIcon}>🖨️</Text>
+            <Text style={styles.shareBtnText}>System Print</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={{ height: 20 }} />
+        <View style={{ height: Spacing.xl }} />
 
-        {/* School Modal */}
+        {/* ── School Picker Modal ── */}
         <Modal visible={schoolModal} animationType="slide" transparent onRequestClose={() => setSchoolModal(false)}>
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>🏫 స్కూల్ Select చేయండి</Text>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="పేరు లేదా UDISE search..."
-                value={schoolSearch}
-                onChangeText={setSchoolSearch}
-              />
+              <Text style={styles.modalTitle}>🏫  స్కూల్ Select చేయండి</Text>
+              <View style={styles.modalSearchBox}>
+                <Text style={{ fontSize: 14 }}>🔍</Text>
+                <TextInput
+                  style={styles.modalSearchInput}
+                  placeholder="పేరు లేదా UDISE search..."
+                  value={schoolSearch}
+                  onChangeText={setSchoolSearch}
+                  placeholderTextColor={Colors.textMuted}
+                />
+              </View>
               {filteredSchools.length === 0 ? (
                 <Text style={styles.emptyHint}>స్కూళ్ళు లేవు. Settings → Schools లో add చేయండి.</Text>
               ) : (
                 <FlatList
                   data={filteredSchools}
                   keyExtractor={item => item.id}
-                  style={{ maxHeight: 400 }}
+                  style={{ maxHeight: 380 }}
                   renderItem={({ item }) => (
                     <TouchableOpacity style={styles.schoolItem} onPress={() => selectSchool(item)}>
-                      <Text style={styles.schoolItemName}>{item.name}</Text>
-                      {item.udise ? <Text style={styles.schoolItemSub}>UDISE: {item.udise}</Text> : null}
-                      {item.address ? <Text style={styles.schoolItemSub}>{item.address}</Text> : null}
+                      <View style={styles.schoolItemIcon}>
+                        <Text style={{ fontSize: 16 }}>🏫</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.schoolItemName}>{item.name}</Text>
+                        {item.udise ? <Text style={styles.schoolItemSub}>UDISE: {item.udise}</Text> : null}
+                        {item.address ? <Text style={styles.schoolItemSub}>{item.address}</Text> : null}
+                      </View>
+                      <Text style={styles.arrow}>›</Text>
                     </TouchableOpacity>
                   )}
                 />
@@ -329,33 +361,22 @@ export default function ReceiptScreen() {
           </View>
         </Modal>
 
-        {/* Copies Modal */}
+        {/* ── Copies Modal ── ui.js → Stepper ── */}
         <Modal visible={copiesModal} animationType="fade" transparent onRequestClose={() => setCopiesModal(false)}>
           <View style={styles.modalOverlay}>
             <View style={styles.copiesModal}>
-              <Text style={styles.modalTitle}>🖨️ Copies</Text>
+              <Text style={styles.modalTitle}>🖨️  Copies</Text>
               <Text style={styles.copiesLabel}>ఎన్ని copies కావాలి?</Text>
-              <View style={styles.copiesRow}>
-                <TouchableOpacity style={styles.spellBtn} onPress={() => setCopies(String(Math.max(1, parseInt(copies || 1) - 1)))}>
-                  <Text style={styles.spellBtnText}>−</Text>
-                </TouchableOpacity>
-                <TextInput
-                  style={styles.copiesInput}
-                  value={copies}
-                  onChangeText={setCopies}
-                  keyboardType="numeric"
-                  textAlign="center"
-                />
-                <TouchableOpacity style={styles.spellBtn} onPress={() => setCopies(String(parseInt(copies || 1) + 1))}>
-                  <Text style={styles.spellBtnText}>+</Text>
-                </TouchableOpacity>
+              {/* ui.js → Stepper */}
+              <View style={styles.copiesStepperWrap}>
+                <Stepper value={copies} onChange={setCopies} min={1} />
               </View>
               <View style={styles.modalActions}>
                 <TouchableOpacity style={styles.cancelBtn} onPress={() => setCopiesModal(false)}>
                   <Text style={styles.cancelBtnText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.confirmBtn} onPress={handlePrint}>
-                  <Text style={styles.confirmBtnText}>Print {copies} Copy</Text>
+                  <Text style={styles.confirmBtnText}>Print {copies} {copies === 1 ? 'Copy' : 'Copies'}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -368,75 +389,133 @@ export default function ReceiptScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe:      { flex: 1, backgroundColor: Colors.bgPage },
+  safe:      { flex: 1, backgroundColor: Colors.background },
   container: { flex: 1 },
-  content:   { padding: Spacing.xl, paddingTop: 52, paddingBottom: 20 },
+  content:   { padding: Spacing.lg, paddingBottom: Spacing.xl, gap: Spacing.sm },
   centered:  { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.xxl },
-  headerSub:   { fontSize: 12, color: Colors.textSecondary, marginBottom: 2 },
-  headerTitle: { fontSize: 28, fontWeight: '800', color: Colors.primaryDark },
-  headerIcon:  { width: 52, height: 52, backgroundColor: Colors.primaryLight, borderRadius: Radius.lg, alignItems: 'center', justifyContent: 'center' },
+  sectionTitle: { ...Typography.label, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: Spacing.xs },
 
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: Colors.textSecondary, marginTop: 16, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  // School Selector
+  schoolSelector: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    elevation: 1,
+  },
+  schoolSelectorLeft:  { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flex: 1 },
+  schoolSelectorIcon:  { width: 40, height: 40, backgroundColor: Colors.primaryLight, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
+  schoolPlaceholder:   { fontSize: 14, color: Colors.textMuted },
+  schoolSelectedName:  { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
+  schoolSelectedUdise: { fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
+  arrow: { color: Colors.textMuted, fontSize: 14, marginLeft: Spacing.sm },
 
-  schoolSelector: { backgroundColor: Colors.bgCard, borderRadius: Radius.lg, padding: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: Colors.borderLight, marginBottom: 8, ...Shadow.card },
-  schoolPlaceholder:   { color: Colors.textHint, fontSize: 15 },
-  schoolSelectedName:  { fontSize: 15, fontWeight: '700', color: Colors.textPrimary },
-  schoolSelectedUdise: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
-  arrow: { color: Colors.textSecondary, fontSize: 12 },
+  // Spell — ui.js Stepper used
+  spellRow:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  spellLabel:    { ...Typography.bodyMd, fontWeight: '600' },
+  spellBadgeWrap:{ alignItems: 'center', marginTop: Spacing.sm },
+  spellBadge:    { backgroundColor: Colors.primaryLight, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.xs, borderRadius: Radius.full },
+  spellBadgeText:{ fontSize: 15, fontWeight: '800', color: Colors.primary },
 
-  card: { backgroundColor: Colors.bgCard, borderRadius: Radius.lg, padding: 14, marginBottom: 8, borderWidth: 0.5, borderColor: Colors.border, ...Shadow.card },
+  // Checklist items
+  checkItem: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.md,
+    padding: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    elevation: 1,
+  },
+  checkItemActive:     { borderColor: Colors.primary, backgroundColor: '#fafafe' },
+  checkbox:            { width: 24, height: 24, borderRadius: Radius.sm, borderWidth: 2, borderColor: Colors.cardBorder, alignItems: 'center', justifyContent: 'center' },
+  checkboxActive:      { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  checkmark:           { color: Colors.primaryText, fontSize: 13, fontWeight: '700' },
+  checkItemName:       { flex: 1, fontSize: 14, fontWeight: '600', color: Colors.textPrimary },
+  checkItemNameMuted:  { color: Colors.textMuted },
+  countInput: {
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    borderRadius: Radius.sm,
+    padding: Spacing.xs,
+    width: 56,
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.primary,
+    textAlign: 'center',
+    backgroundColor: Colors.primaryLight,
+  },
 
-  spellRow:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 24 },
-  spellBtn:    { width: 44, height: 44, backgroundColor: Colors.primaryLight, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  spellBtnText:{ fontSize: 24, color: Colors.primary, fontWeight: '700' },
-  spellValue:  { fontSize: 22, fontWeight: '800', color: Colors.primaryDark, minWidth: 100, textAlign: 'center' },
+  // Empty states
+  emptyCard: { alignItems: 'center', gap: Spacing.xs },
+  emptyIcon: { fontSize: 40, marginBottom: Spacing.xs },
+  emptyText: { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
+  emptyHint: { fontSize: 12, color: Colors.textMuted, textAlign: 'center' },
 
-  checkItem: { backgroundColor: Colors.bgCard, borderRadius: Radius.md, padding: 12, marginBottom: 6, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: Colors.borderLight, ...Shadow.card },
-  checkItemActive: { borderColor: Colors.primary, backgroundColor: '#fafafe' },
-  checkbox:   { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: Colors.borderLight, alignItems: 'center', justifyContent: 'center' },
-  checkboxActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
-  checkmark:  { color: '#fff', fontSize: 14, fontWeight: '700' },
-  checkItemName: { flex: 1, fontSize: 14, fontWeight: '600', color: Colors.textPrimary },
-  checkItemNameMuted: { color: Colors.textHint },
-  countInput: { borderWidth: 1.5, borderColor: Colors.primary, borderRadius: Radius.sm, padding: 6, width: 60, fontSize: 15, fontWeight: '700', color: Colors.primary, textAlign: 'center', backgroundColor: Colors.primaryLight },
+  // Summary
+  summaryRow:   { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: Spacing.xs },
+  summaryLabel: { ...Typography.bodyMd },
+  summaryValue: { fontSize: 14, fontWeight: '600', color: Colors.textPrimary },
+  totalRow:     { borderTopWidth: 1, borderTopColor: Colors.cardBorder, marginTop: Spacing.xs, paddingTop: Spacing.sm },
+  totalLabel:   { fontSize: 15, fontWeight: '700', color: Colors.textPrimary },
+  totalValue:   { fontSize: 15, fontWeight: '800', color: Colors.primary },
 
-  emptyCard: { backgroundColor: Colors.bgCard, borderRadius: Radius.lg, padding: 20, alignItems: 'center', marginBottom: 8 },
-  emptyText: { fontSize: 14, fontWeight: '700', color: Colors.textPrimary, marginBottom: 4 },
-  emptyHint: { fontSize: 12, color: Colors.textHint, textAlign: 'center' },
+  // Print button
+  printBtn: {
+    backgroundColor: Colors.primary,
+    padding: Spacing.md,
+    borderRadius: Radius.lg,
+    alignItems: 'center',
+    marginTop: Spacing.sm,
+    elevation: 2,
+  },
+  printBtnDisabled: { backgroundColor: '#a5b4fc' },
+  printBtnInner:    { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  printBtnIcon:     { fontSize: 18 },
+  printBtnText:     { color: Colors.primaryText, fontWeight: '700', fontSize: 15 },
 
-  summaryRow:  { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
-  summaryLabel:{ color: Colors.textSecondary, fontSize: 14 },
-  summaryValue:{ color: Colors.textPrimary, fontSize: 14, fontWeight: '600' },
-  totalRow:    { borderTopWidth: 1, borderTopColor: Colors.borderLight, marginTop: 4, paddingTop: 8 },
-  totalLabel:  { fontWeight: '700', fontSize: 16, color: Colors.textPrimary },
-  totalValue:  { fontWeight: '800', fontSize: 16, color: Colors.primary },
+  // Share row
+  shareRow: { flexDirection: 'row', gap: Spacing.sm },
+  shareBtn: {
+    flex: 1,
+    backgroundColor: Colors.surface,
+    padding: Spacing.md,
+    borderRadius: Radius.lg,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    borderWidth: 1,
+    borderColor: Colors.primary,
+  },
+  shareBtnIcon: { fontSize: 15 },
+  shareBtnText: { color: Colors.primary, fontWeight: '700', fontSize: 13 },
 
-  printBtn:        { backgroundColor: Colors.primary, padding: 16, borderRadius: Radius.lg, alignItems: 'center', marginTop: 16, ...Shadow.card },
-  printBtnDisabled:{ backgroundColor: Colors.primaryMid },
-  printBtnText:    { color: '#fff', fontWeight: '700', fontSize: 16 },
-
-  shareRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  shareBtn: { flex: 1, backgroundColor: Colors.bgCard, padding: 14, borderRadius: Radius.lg, alignItems: 'center', borderWidth: 1, borderColor: Colors.primary },
-  shareBtnText: { color: Colors.primary, fontWeight: '700', fontSize: 14 },
-
+  // Modals
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: Colors.bgCard, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, padding: 20, paddingBottom: 36 },
-  copiesModal:  { backgroundColor: Colors.bgCard, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, padding: 24, paddingBottom: 36 },
-  modalTitle:   { fontSize: 20, fontWeight: '800', color: Colors.primaryDark, marginBottom: 12 },
-  copiesLabel:  { fontSize: 15, color: Colors.textSecondary, marginBottom: 16, textAlign: 'center' },
-  copiesRow:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 24, marginBottom: 20 },
-  copiesInput:  { borderWidth: 2, borderColor: Colors.primary, borderRadius: Radius.md, padding: 10, width: 80, fontSize: 24, fontWeight: '800', color: Colors.primary },
-  searchInput:  { backgroundColor: Colors.bgPage, borderRadius: Radius.md, padding: 12, fontSize: 14, marginBottom: 12, color: Colors.textPrimary },
-  schoolItem:   { paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: Colors.borderLight },
-  schoolItemName: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary },
-  schoolItemSub:  { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
-  closeBtn:     { backgroundColor: Colors.bgPage, padding: 14, borderRadius: Radius.md, alignItems: 'center', marginTop: 12 },
+  modalContent: { backgroundColor: Colors.surface, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, padding: Spacing.lg, paddingBottom: 36 },
+  copiesModal:  { backgroundColor: Colors.surface, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, padding: Spacing.lg, paddingBottom: 36, alignItems: 'center' },
+  modalTitle:   { fontSize: 20, fontWeight: '800', color: Colors.primaryDark, marginBottom: Spacing.md },
+  copiesLabel:  { ...Typography.bodyMd, color: Colors.textSecondary, marginBottom: Spacing.lg },
+  copiesStepperWrap: { transform: [{ scale: 1.4 }], marginBottom: Spacing.xl },
+  modalSearchBox: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, backgroundColor: Colors.background, borderRadius: Radius.md, paddingHorizontal: Spacing.md, marginBottom: Spacing.md },
+  modalSearchInput: { flex: 1, paddingVertical: Spacing.sm, fontSize: 14, color: Colors.textPrimary },
+  schoolItem: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.md, borderBottomWidth: 0.5, borderBottomColor: Colors.cardBorder },
+  schoolItemIcon: { width: 36, height: 36, backgroundColor: Colors.primaryLight, borderRadius: Radius.sm, alignItems: 'center', justifyContent: 'center' },
+  schoolItemName: { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
+  schoolItemSub:  { fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
+  closeBtn:     { backgroundColor: Colors.background, padding: Spacing.md, borderRadius: Radius.md, alignItems: 'center', marginTop: Spacing.md },
   closeBtnText: { color: Colors.textSecondary, fontWeight: '600' },
-  modalActions: { flexDirection: 'row', gap: 10, marginTop: 8 },
-  cancelBtn:    { flex: 1, padding: 14, borderRadius: Radius.md, alignItems: 'center', borderWidth: 1, borderColor: Colors.borderLight },
+  modalActions: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm, width: '100%' },
+  cancelBtn:    { flex: 1, padding: Spacing.md, borderRadius: Radius.md, alignItems: 'center', borderWidth: 1, borderColor: Colors.cardBorder },
   cancelBtnText:{ color: Colors.textSecondary, fontWeight: '600' },
-  confirmBtn:   { flex: 1, backgroundColor: Colors.primary, padding: 14, borderRadius: Radius.md, alignItems: 'center' },
-  confirmBtnText:{ color: '#fff', fontWeight: '700' },
+  confirmBtn:   { flex: 1, backgroundColor: Colors.primary, padding: Spacing.md, borderRadius: Radius.md, alignItems: 'center' },
+  confirmBtnText:{ color: Colors.primaryText, fontWeight: '700' },
 });

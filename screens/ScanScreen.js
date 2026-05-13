@@ -2,10 +2,11 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, ActivityIndicator,
-  Alert, StyleSheet, PermissionsAndroid, Platform, SafeAreaView,
+  Alert, StyleSheet, PermissionsAndroid, Platform, SafeAreaView, ScrollView,
 } from 'react-native';
 import BluetoothService from '../services/BluetoothService';
-import { Colors, Radius, Spacing, Shadow } from '../constants/Theme';
+import { Colors, Radius, Spacing, Typography } from '../theme';
+import { ScreenHeader, Card } from '../components/ui';
 
 export default function ScanScreen({ navigation }) {
   const [pairedDevices, setPairedDevices] = useState([]);
@@ -68,11 +69,11 @@ export default function ScanScreen({ navigation }) {
       activeOpacity={0.8}
     >
       <View style={styles.deviceIcon}>
-        <Text style={{ fontSize: 20 }}>🖨️</Text>
+        <Text style={{ fontSize: 22 }}>🖨️</Text>
       </View>
       <View style={styles.deviceInfo}>
         <Text style={styles.deviceName}>{item.name || 'Unknown Device'}</Text>
-        <Text style={styles.deviceAddress}>{item.address}</Text>
+        <Text style={styles.deviceAddress}>📶 {item.address}</Text>
       </View>
       {connecting === item.address ? (
         <ActivityIndicator color={Colors.primary} />
@@ -86,28 +87,30 @@ export default function ScanScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.container}>
 
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-            <Text style={styles.backBtnText}>‹ Back</Text>
-          </TouchableOpacity>
-          <View style={styles.headerIcon}>
-            <Text style={{ fontSize: 26 }}>🔍</Text>
-          </View>
-        </View>
+      {/* ── ui.js → ScreenHeader ── */}
+      <ScreenHeader title="Connect" subtitle="Bluetooth Printer" />
 
-        <Text style={styles.headerSub}>Bluetooth Printer</Text>
-        <Text style={styles.headerTitle}>Connect</Text>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
 
-        {/* Paired Devices */}
-        <Text style={styles.sectionTitle}>Paired Devices</Text>
+        {/* Back button row */}
+        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <Text style={styles.backBtnText}>‹  Back</Text>
+        </TouchableOpacity>
+
+        {/* ── Paired Devices ── */}
+        <Text style={styles.sectionTitle}>🔗  Paired Devices</Text>
         {pairedDevices.length === 0 ? (
-          <View style={styles.emptyCard}>
+          // ui.js → Card
+          <Card style={styles.emptyCard}>
+            <Text style={styles.emptyIcon}>📵</Text>
             <Text style={styles.emptyText}>Paired devices లేవు</Text>
             <Text style={styles.emptyHint}>Phone Settings లో printer pair చేయండి</Text>
-          </View>
+          </Card>
         ) : (
           <FlatList
             data={pairedDevices}
@@ -117,7 +120,7 @@ export default function ScanScreen({ navigation }) {
           />
         )}
 
-        {/* Scan Button */}
+        {/* ── Scan Button ── */}
         <TouchableOpacity
           style={[styles.scanBtn, scanning && styles.scanBtnDisabled]}
           onPress={startScan}
@@ -126,73 +129,103 @@ export default function ScanScreen({ navigation }) {
         >
           {scanning ? (
             <View style={styles.scanBtnContent}>
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={Colors.primaryText} size="small" />
               <Text style={styles.scanBtnText}>Scanning...</Text>
             </View>
           ) : (
             <View style={styles.scanBtnContent}>
-              <Text style={{ fontSize: 20 }}>📡</Text>
+              <Text style={styles.scanBtnIcon}>📡</Text>
               <Text style={styles.scanBtnText}>Scan for New Devices</Text>
             </View>
           )}
         </TouchableOpacity>
 
-        {/* Nearby Devices */}
+        {/* ── Nearby Devices ── */}
         {nearbyDevices.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Nearby Devices</Text>
+            <Text style={styles.sectionTitle}>📡  Nearby Devices</Text>
             <FlatList
               data={nearbyDevices}
               keyExtractor={item => item.address}
               renderItem={renderDevice}
+              scrollEnabled={false}
             />
           </>
         )}
 
-        {/* Hint */}
-        <View style={styles.hintCard}>
-          <Text style={styles.hintTitle}>💡 Tips</Text>
-          <Text style={styles.hintText}>• Printer on చేయండి</Text>
-          <Text style={styles.hintText}>• Phone Bluetooth on చేయండి</Text>
-          <Text style={styles.hintText}>• "EC58" లేదా "BT Printer" పేరు కోసం చూడండి</Text>
-        </View>
+        {/* ── Tips ── ui.js → Card ── */}
+        <Text style={styles.sectionTitle}>💡  Tips</Text>
+        <Card style={styles.hintCard}>
+          {[
+            { icon: '🔌', text: 'Printer on చేయండి' },
+            { icon: '📱', text: 'Phone Bluetooth on చేయండి' },
+            { icon: '🔍', text: '"EC58" లేదా "BT Printer" పేరు కోసం చూడండి' },
+          ].map((tip, idx) => (
+            <View key={idx} style={styles.tipRow}>
+              <Text style={styles.tipIcon}>{tip.icon}</Text>
+              <Text style={styles.tipText}>{tip.text}</Text>
+            </View>
+          ))}
+        </Card>
 
-      </View>
+        <View style={{ height: Spacing.xl }} />
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe:      { flex: 1, backgroundColor: Colors.bgPage },
-  container: { flex: 1, padding: Spacing.xl, paddingTop: 52 },
+  safe:      { flex: 1, backgroundColor: Colors.background },
+  container: { flex: 1 },
+  content:   { padding: Spacing.lg, gap: Spacing.sm },
 
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  backBtn:     { paddingVertical: 8, paddingRight: 16 },
+  backBtn:     { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.xs },
   backBtnText: { fontSize: 16, color: Colors.primary, fontWeight: '600' },
-  headerIcon:  { width: 52, height: 52, backgroundColor: Colors.primaryLight, borderRadius: Radius.lg, alignItems: 'center', justifyContent: 'center' },
-  headerSub:   { fontSize: 12, color: Colors.textSecondary, marginBottom: 2 },
-  headerTitle: { fontSize: 28, fontWeight: '800', color: Colors.primaryDark, marginBottom: Spacing.xxl },
 
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: Colors.textSecondary, marginTop: 8, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  sectionTitle: { ...Typography.label, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: Spacing.xs },
 
-  deviceCard: { backgroundColor: Colors.bgCard, borderRadius: Radius.lg, padding: 14, marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 0.5, borderColor: Colors.border, ...Shadow.card },
-  deviceIcon: { width: 44, height: 44, backgroundColor: Colors.primaryLight, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
-  deviceInfo: { flex: 1 },
+  // Device card
+  deviceCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    borderWidth: 0.5,
+    borderColor: Colors.cardBorder,
+    elevation: 1,
+  },
+  deviceIcon:    { width: 44, height: 44, backgroundColor: Colors.primaryLight, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
+  deviceInfo:    { flex: 1 },
   deviceName:    { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
-  deviceAddress: { fontSize: 11, color: Colors.textHint, marginTop: 2 },
-  connectBadge:  { backgroundColor: Colors.primaryLight, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
+  deviceAddress: { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
+  connectBadge:  { backgroundColor: Colors.primaryLight, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: Radius.full },
   connectBadgeText: { color: Colors.primary, fontWeight: '700', fontSize: 12 },
 
-  emptyCard: { backgroundColor: Colors.bgCard, borderRadius: Radius.lg, padding: 20, alignItems: 'center', marginBottom: 8, borderWidth: 0.5, borderColor: Colors.border },
-  emptyText: { fontSize: 14, fontWeight: '600', color: Colors.textPrimary, marginBottom: 4 },
-  emptyHint: { fontSize: 12, color: Colors.textHint, textAlign: 'center' },
+  // Empty card
+  emptyCard: { alignItems: 'center', gap: Spacing.xs },
+  emptyIcon: { fontSize: 36 },
+  emptyText: { fontSize: 14, fontWeight: '600', color: Colors.textPrimary },
+  emptyHint: { ...Typography.bodySm, textAlign: 'center' },
 
-  scanBtn: { backgroundColor: Colors.primary, borderRadius: Radius.lg, padding: 16, alignItems: 'center', marginVertical: 12, ...Shadow.card },
-  scanBtnDisabled: { backgroundColor: Colors.primaryMid },
-  scanBtnContent:  { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  scanBtnText:     { color: '#fff', fontWeight: '700', fontSize: 15 },
+  // Scan button
+  scanBtn: {
+    backgroundColor: Colors.primary,
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    alignItems: 'center',
+    elevation: 2,
+  },
+  scanBtnDisabled: { backgroundColor: '#a5b4fc' },
+  scanBtnContent:  { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  scanBtnIcon:     { fontSize: 20 },
+  scanBtnText:     { color: Colors.primaryText, fontWeight: '700', fontSize: 15 },
 
-  hintCard: { backgroundColor: '#f0f4ff', borderRadius: Radius.lg, padding: 16, marginTop: 8, borderWidth: 1, borderColor: '#e0e7ff' },
-  hintTitle:{ fontSize: 13, fontWeight: '700', color: '#3730a3', marginBottom: 8 },
-  hintText: { fontSize: 12, color: '#4338ca', marginBottom: 4 },
+  // Hint card
+  hintCard: { gap: Spacing.sm },
+  tipRow:   { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  tipIcon:  { fontSize: 16, width: 24, textAlign: 'center' },
+  tipText:  { fontSize: 13, color: Colors.textAccent, flex: 1 },
 });
