@@ -5,6 +5,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 
+
 import HomeScreen     from './screens/HomeScreen';
 import ScanScreen     from './screens/ScanScreen';
 import ReceiptScreen  from './screens/ReceiptScreen';

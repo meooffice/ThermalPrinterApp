@@ -7,8 +7,8 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import BluetoothService from '../services/BluetoothService';
 import EscPosEncoder from '../services/EscPosEncoder';
-import { Colors, Spacing, Radius, Typography } from '../theme';
-import { ScreenHeader, ConnectedChip, Card } from '../components/ui';
+import { Colors, Radius, Spacing, Typography } from '../constants/Theme'; 
+import { ScreenHeader, Card, ConnectedChip} from '../components/Ui';
 
 export default function HomeScreen({ navigation }) {
   const [connected, setConnected] = useState(false);

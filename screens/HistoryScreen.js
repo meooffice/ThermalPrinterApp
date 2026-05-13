@@ -9,8 +9,9 @@ import ReceiptHistory from '../services/ReceiptHistory';
 import BluetoothService from '../services/BluetoothService';
 import EscPosEncoder from '../services/EscPosEncoder';
 import SettingsService from '../services/SettingsService';
-import { Colors, Spacing, Radius, Typography } from '../theme';
-import { ScreenHeader, Card } from '../components/ui';
+import { Colors, Radius, Spacing, Typography } from '../constants/Theme'; 
+import { ScreenHeader, Card } from '../components/Ui';
+
 
 export default function HistoryScreen() {
   const [history, setHistory]   = useState([]);

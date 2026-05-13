@@ -13,8 +13,8 @@ import SettingsService from '../services/SettingsService';
 import SchoolService from '../services/SchoolService';
 import CatalogService from '../services/CatalogService';
 import ShareService from '../services/ShareService';
-import { Colors, Radius, Spacing, Typography } from '../theme';
-import { ScreenHeader, Card, Stepper } from '../components/ui';
+import { Colors, Radius, Spacing, Typography } from '../constants/Theme'; 
+import { ScreenHeader, Card, Stepper } from '../components/Ui';
 
 export default function ReceiptScreen() {
   const [settings, setSettings]         = useState(null);

@@ -5,8 +5,8 @@ import {
   Alert, StyleSheet, PermissionsAndroid, Platform, SafeAreaView, ScrollView,
 } from 'react-native';
 import BluetoothService from '../services/BluetoothService';
-import { Colors, Radius, Spacing, Typography } from '../theme';
-import { ScreenHeader, Card } from '../components/ui';
+import { Colors, Radius, Spacing, Typography } from '../constants/Theme'; 
+import { ScreenHeader, Card, ConnectedChip } from '../components/Ui';
 
 export default function ScanScreen({ navigation }) {
   const [pairedDevices, setPairedDevices] = useState([]);

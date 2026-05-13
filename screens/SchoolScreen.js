@@ -6,8 +6,8 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import SchoolService from '../services/SchoolService';
-import { Colors, Radius, Spacing, Typography } from '../theme';
-import { ScreenHeader, Card } from '../components/ui';
+import { Colors, Radius, Spacing, Typography } from '../constants/Theme'; 
+import { ScreenHeader, Card } from '../components/Ui';
 
 const EMPTY_FORM = { name: '', udise: '', address: '' };
 

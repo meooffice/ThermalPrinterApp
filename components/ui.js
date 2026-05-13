@@ -10,7 +10,7 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
-import { Colors, Spacing, Radius, Typography } from '../theme';
+import { Colors, Spacing, Radius, Typography } from '../Themes';
 
 // ─── StatusBar color helper ───────────────────────────────────────────────────
 // In your App.tsx or layout, set:
