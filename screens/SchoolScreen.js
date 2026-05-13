@@ -3,6 +3,7 @@ import React, { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, TextInput,
   StyleSheet, Alert, Modal, ActivityIndicator, SafeAreaView,
+  KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import SchoolService from '../services/SchoolService';
@@ -50,7 +51,6 @@ export default function SchoolScreen({ navigation }) {
   );
 
   const renderSchool = ({ item }) => (
-    // ui.js → Card
     <Card style={styles.schoolCard}>
       <View style={styles.cardLeft}>
         <View style={styles.schoolIcon}>
@@ -91,12 +91,7 @@ export default function SchoolScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safe}>
-
-      {/* ── ui.js → ScreenHeader ── */}
-      <ScreenHeader
-        title="Schools"
-        subtitle={`${schools.length} schools registered`}
-      />
+      <ScreenHeader title="Schools" subtitle={`${schools.length} schools registered`} />
 
       <View style={styles.container}>
 
@@ -146,42 +141,71 @@ export default function SchoolScreen({ navigation }) {
         )}
       </View>
 
-      {/* ── Add/Edit Modal ── */}
-      <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+      {/*
+        FIX 2: Modal form above keyboard.
+        Strategy:
+        - Modal has transparent overlay + justifyContent:'flex-end'
+        - Inside, KeyboardAvoidingView with behavior='padding' pushes
+          the sheet up exactly as tall as the keyboard.
+        - ScrollView inside the sheet lets fields scroll if still cramped.
+      */}
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalKAV}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setModal(false)}
+          />
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>
               {editSchool ? '✏️  Edit School' : '🏫  Add School'}
             </Text>
 
-            <Text style={styles.inputLabel}>School Name *</Text>
-            <TextInput
-              style={styles.input}
-              value={form.name}
-              onChangeText={v => setForm({ ...form, name: v })}
-              placeholder="e.g. ZP High School Rajanagaram"
-              placeholderTextColor={Colors.textMuted}
-            />
+            {/* ScrollView so fields don't clip if keyboard is tall */}
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={styles.inputLabel}>School Name *</Text>
+              <TextInput
+                style={styles.input}
+                value={form.name}
+                onChangeText={v => setForm({ ...form, name: v })}
+                placeholder="e.g. ZP High School Rajanagaram"
+                placeholderTextColor={Colors.textMuted}
+                returnKeyType="next"
+              />
 
-            <Text style={styles.inputLabel}>UDISE Code</Text>
-            <TextInput
-              style={styles.input}
-              value={form.udise}
-              onChangeText={v => setForm({ ...form, udise: v })}
-              placeholder="e.g. 36XXXXXXXXXX"
-              keyboardType="numeric"
-              placeholderTextColor={Colors.textMuted}
-            />
+              <Text style={styles.inputLabel}>UDISE Code</Text>
+              <TextInput
+                style={styles.input}
+                value={form.udise}
+                onChangeText={v => setForm({ ...form, udise: v })}
+                placeholder="e.g. 36XXXXXXXXXX"
+                keyboardType="numeric"
+                placeholderTextColor={Colors.textMuted}
+                returnKeyType="next"
+              />
 
-            <Text style={styles.inputLabel}>Address</Text>
-            <TextInput
-              style={[styles.input, styles.inputMultiline]}
-              value={form.address}
-              onChangeText={v => setForm({ ...form, address: v })}
-              placeholder="Village, Mandal, District"
-              multiline
-              placeholderTextColor={Colors.textMuted}
-            />
+              <Text style={styles.inputLabel}>Address</Text>
+              <TextInput
+                style={[styles.input, styles.inputMultiline]}
+                value={form.address}
+                onChangeText={v => setForm({ ...form, address: v })}
+                placeholder="Village, Mandal, District"
+                multiline
+                placeholderTextColor={Colors.textMuted}
+              />
+            </ScrollView>
 
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setModal(false)}>
@@ -192,7 +216,7 @@ export default function SchoolScreen({ navigation }) {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -203,29 +227,22 @@ const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: Spacing.lg },
   centered:  { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: Spacing.md },
+  topRow:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: Spacing.md },
   backBtn:     { flexDirection: 'row', alignItems: 'center' },
   backBtnText: { fontSize: 16, color: Colors.primary, fontWeight: '600' },
   addBtn:      { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, backgroundColor: Colors.primary, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.lg },
   addBtnIcon:  { fontSize: 14, color: Colors.primaryText, fontWeight: '700' },
   addBtnText:  { color: Colors.primaryText, fontWeight: '700', fontSize: 13 },
 
-  // Search
   searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
-    paddingHorizontal: Spacing.md,
-    marginBottom: Spacing.sm,
-    borderWidth: 0.5,
-    borderColor: Colors.cardBorder,
-    gap: Spacing.sm,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.surface, borderRadius: Radius.lg,
+    paddingHorizontal: Spacing.md, marginBottom: Spacing.sm,
+    borderWidth: 0.5, borderColor: Colors.cardBorder, gap: Spacing.sm,
   },
   searchIcon:  { fontSize: 16 },
   searchInput: { flex: 1, paddingVertical: Spacing.md, fontSize: 14, color: Colors.textPrimary },
 
-  // School card
   schoolCard:   { marginBottom: Spacing.sm, flexDirection: 'row', alignItems: 'flex-start' },
   cardLeft:     { flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm },
   schoolIcon:   { width: 44, height: 44, backgroundColor: Colors.primaryLight, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
@@ -239,21 +256,45 @@ const styles = StyleSheet.create({
   editBtn:      { backgroundColor: Colors.primaryLight, padding: Spacing.sm, borderRadius: Radius.sm },
   deleteBtn:    { backgroundColor: Colors.dangerBg, padding: Spacing.sm, borderRadius: Radius.sm },
 
-  // Empty
   emptyEmoji: { fontSize: 52, marginBottom: Spacing.md },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary, marginBottom: Spacing.xs },
   emptyHint:  { ...Typography.bodySm, textAlign: 'center' },
 
-  // Modal
-  modalOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent:  { backgroundColor: Colors.surface, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, padding: Spacing.lg, paddingBottom: 36 },
+  // FIX 2 — Modal + KAV layout
+  modalKAV: {
+    flex: 1,
+    justifyContent: 'flex-end',   // sheet sticks to bottom
+  },
+  modalBackdrop: {
+    // semi-transparent area above the sheet — tap to dismiss
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  modalSheet: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+    padding: Spacing.lg,
+    paddingBottom: Platform.OS === 'ios' ? 36 : Spacing.lg,
+    // cap max height so the sheet never fills the whole screen
+    maxHeight: '85%',
+  },
+  modalHandle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: Colors.cardBorder,
+    alignSelf: 'center', marginBottom: Spacing.md,
+  },
   modalTitle:    { fontSize: 20, fontWeight: '800', color: Colors.primaryDark, marginBottom: Spacing.md },
   inputLabel:    { ...Typography.label, marginBottom: Spacing.xs, marginTop: Spacing.xs },
-  input:         { borderWidth: 1, borderColor: Colors.cardBorder, borderRadius: Radius.md, padding: Spacing.sm, fontSize: 14, color: Colors.textPrimary, marginBottom: Spacing.sm, backgroundColor: Colors.background },
-  inputMultiline:{ height: 72, textAlignVertical: 'top' },
-  modalActions:  { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm },
-  cancelBtn:     { flex: 1, padding: Spacing.md, borderRadius: Radius.md, alignItems: 'center', borderWidth: 1, borderColor: Colors.cardBorder },
-  cancelBtnText: { color: Colors.textSecondary, fontWeight: '600' },
-  saveBtn:       { flex: 1, backgroundColor: Colors.primary, padding: Spacing.md, borderRadius: Radius.md, alignItems: 'center' },
-  saveBtnText:   { color: Colors.primaryText, fontWeight: '700' },
+  input: {
+    borderWidth: 1, borderColor: Colors.cardBorder, borderRadius: Radius.md,
+    padding: Spacing.sm, fontSize: 14, color: Colors.textPrimary,
+    marginBottom: Spacing.sm, backgroundColor: Colors.background,
+  },
+  inputMultiline: { height: 72, textAlignVertical: 'top' },
+  modalActions:   { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm },
+  cancelBtn:      { flex: 1, padding: Spacing.md, borderRadius: Radius.md, alignItems: 'center', borderWidth: 1, borderColor: Colors.cardBorder },
+  cancelBtnText:  { color: Colors.textSecondary, fontWeight: '600' },
+  saveBtn:        { flex: 1, backgroundColor: Colors.primary, padding: Spacing.md, borderRadius: Radius.md, alignItems: 'center' },
+  saveBtnText:    { color: Colors.primaryText, fontWeight: '700' },
 });

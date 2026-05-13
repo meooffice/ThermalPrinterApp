@@ -3,6 +3,7 @@ import React, { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, TextInput,
   StyleSheet, Alert, Modal, ActivityIndicator, SafeAreaView,
+  KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -65,7 +66,6 @@ export default function CatalogScreen({ navigation }) {
   );
 
   const renderItem = ({ item }) => (
-    // ui.js → Card
     <Card style={styles.itemCard}>
       <View style={styles.cardLeft}>
         <View style={styles.itemIcon}>
@@ -77,9 +77,7 @@ export default function CatalogScreen({ navigation }) {
             <View style={styles.categoryBadge}>
               <Text style={styles.categoryText}>🏷️ {item.category}</Text>
             </View>
-            {item.barcode ? (
-              <Text style={styles.barcodeText}>📷 {item.barcode}</Text>
-            ) : null}
+            {item.barcode ? <Text style={styles.barcodeText}>📷 {item.barcode}</Text> : null}
           </View>
         </View>
       </View>
@@ -107,12 +105,7 @@ export default function CatalogScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.safe}>
-
-      {/* ── ui.js → ScreenHeader ── */}
-      <ScreenHeader
-        title="Item Catalog"
-        subtitle={`${items.length} items available`}
-      />
+      <ScreenHeader title="Item Catalog" subtitle={`${items.length} items available`} />
 
       <View style={styles.container}>
 
@@ -162,45 +155,73 @@ export default function CatalogScreen({ navigation }) {
         )}
       </View>
 
-      {/* ── Add/Edit Modal ── */}
-      <Modal visible={modalVisible} animationType="slide" transparent onRequestClose={() => setModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+      {/*
+        FIX 2: Add/Edit Modal — form above keyboard.
+        Same pattern as SchoolScreen:
+        KeyboardAvoidingView wraps the sheet so it lifts when
+        the keyboard opens. ScrollView inside allows scrolling
+        if fields are still cramped.
+      */}
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setModal(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalKAV}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setModal(false)}
+          />
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>
               {editItem ? '✏️  Edit Item' : '📦  Add Item'}
             </Text>
 
-            <Text style={styles.inputLabel}>Item Name *</Text>
-            <TextInput
-              style={styles.input}
-              value={form.name}
-              onChangeText={v => setForm({ ...form, name: v })}
-              placeholder="e.g. Note Books"
-              placeholderTextColor={Colors.textMuted}
-            />
-
-            <Text style={styles.inputLabel}>Category</Text>
-            <TextInput
-              style={styles.input}
-              value={form.category}
-              onChangeText={v => setForm({ ...form, category: v })}
-              placeholder="e.g. Stationery, Books"
-              placeholderTextColor={Colors.textMuted}
-            />
-
-            <Text style={styles.inputLabel}>Barcode (optional)</Text>
-            <View style={styles.barcodeRow}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={styles.inputLabel}>Item Name *</Text>
               <TextInput
-                style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                value={form.barcode}
-                onChangeText={v => setForm({ ...form, barcode: v })}
-                placeholder="Scan or type barcode"
+                style={styles.input}
+                value={form.name}
+                onChangeText={v => setForm({ ...form, name: v })}
+                placeholder="e.g. Note Books"
                 placeholderTextColor={Colors.textMuted}
+                returnKeyType="next"
               />
-              <TouchableOpacity style={styles.scanBtn} onPress={handleScan}>
-                <Text style={{ fontSize: 22 }}>📷</Text>
-              </TouchableOpacity>
-            </View>
+
+              <Text style={styles.inputLabel}>Category</Text>
+              <TextInput
+                style={styles.input}
+                value={form.category}
+                onChangeText={v => setForm({ ...form, category: v })}
+                placeholder="e.g. Stationery, Books"
+                placeholderTextColor={Colors.textMuted}
+                returnKeyType="next"
+              />
+
+              <Text style={styles.inputLabel}>Barcode (optional)</Text>
+              <View style={styles.barcodeRow}>
+                <TextInput
+                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                  value={form.barcode}
+                  onChangeText={v => setForm({ ...form, barcode: v })}
+                  placeholder="Scan or type barcode"
+                  placeholderTextColor={Colors.textMuted}
+                  returnKeyType="done"
+                />
+                <TouchableOpacity style={styles.scanBtn} onPress={handleScan}>
+                  <Text style={{ fontSize: 22 }}>📷</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
 
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setModal(false)}>
@@ -211,7 +232,7 @@ export default function CatalogScreen({ navigation }) {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── Barcode Scanner Modal ── */}
@@ -245,35 +266,28 @@ const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: Spacing.lg },
   centered:  { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: Spacing.md },
+  topRow:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: Spacing.md },
   backBtn:     { flexDirection: 'row', alignItems: 'center' },
   backBtnText: { fontSize: 16, color: Colors.primary, fontWeight: '600' },
   addBtn:      { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, backgroundColor: Colors.primary, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.lg },
   addBtnIcon:  { fontSize: 14, color: Colors.primaryText, fontWeight: '700' },
   addBtnText:  { color: Colors.primaryText, fontWeight: '700', fontSize: 13 },
 
-  // Search
   searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
-    paddingHorizontal: Spacing.md,
-    marginBottom: Spacing.sm,
-    borderWidth: 0.5,
-    borderColor: Colors.cardBorder,
-    gap: Spacing.sm,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.surface, borderRadius: Radius.lg,
+    paddingHorizontal: Spacing.md, marginBottom: Spacing.sm,
+    borderWidth: 0.5, borderColor: Colors.cardBorder, gap: Spacing.sm,
   },
   searchIcon:  { fontSize: 16 },
   searchInput: { flex: 1, paddingVertical: Spacing.md, fontSize: 14, color: Colors.textPrimary },
 
-  // Item card
-  itemCard:    { marginBottom: Spacing.sm, flexDirection: 'row', alignItems: 'center' },
-  cardLeft:    { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  itemIcon:    { width: 44, height: 44, backgroundColor: Colors.primaryLight, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
-  itemInfo:    { flex: 1 },
-  itemName:    { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
-  itemMeta:    { flexDirection: 'row', gap: Spacing.sm, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' },
+  itemCard:      { marginBottom: Spacing.sm, flexDirection: 'row', alignItems: 'center' },
+  cardLeft:      { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  itemIcon:      { width: 44, height: 44, backgroundColor: Colors.primaryLight, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
+  itemInfo:      { flex: 1 },
+  itemName:      { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
+  itemMeta:      { flexDirection: 'row', gap: Spacing.sm, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' },
   categoryBadge: { backgroundColor: Colors.background, paddingHorizontal: Spacing.sm, paddingVertical: 2, borderRadius: Radius.sm },
   categoryText:  { fontSize: 11, color: Colors.textSecondary },
   barcodeText:   { fontSize: 11, color: Colors.textMuted },
@@ -281,17 +295,39 @@ const styles = StyleSheet.create({
   editBtn:       { backgroundColor: Colors.primaryLight, padding: Spacing.sm, borderRadius: Radius.sm },
   deleteBtn:     { backgroundColor: Colors.dangerBg, padding: Spacing.sm, borderRadius: Radius.sm },
 
-  // Empty
   emptyEmoji: { fontSize: 52, marginBottom: Spacing.md },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary, marginBottom: Spacing.xs },
   emptyHint:  { ...Typography.bodySm, textAlign: 'center' },
 
-  // Modal
-  modalOverlay:  { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalContent:  { backgroundColor: Colors.surface, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, padding: Spacing.lg, paddingBottom: 36 },
+  // FIX 2 — Modal + KAV layout
+  modalKAV: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  modalSheet: {
+    backgroundColor: Colors.surface,
+    borderTopLeftRadius: Radius.xl,
+    borderTopRightRadius: Radius.xl,
+    padding: Spacing.lg,
+    paddingBottom: Platform.OS === 'ios' ? 36 : Spacing.lg,
+    maxHeight: '85%',
+  },
+  modalHandle: {
+    width: 40, height: 4, borderRadius: 2,
+    backgroundColor: Colors.cardBorder,
+    alignSelf: 'center', marginBottom: Spacing.md,
+  },
   modalTitle:    { fontSize: 20, fontWeight: '800', color: Colors.primaryDark, marginBottom: Spacing.md },
   inputLabel:    { ...Typography.label, marginBottom: Spacing.xs, marginTop: Spacing.xs },
-  input:         { borderWidth: 1, borderColor: Colors.cardBorder, borderRadius: Radius.md, padding: Spacing.sm, fontSize: 14, color: Colors.textPrimary, marginBottom: Spacing.sm, backgroundColor: Colors.background },
+  input: {
+    borderWidth: 1, borderColor: Colors.cardBorder, borderRadius: Radius.md,
+    padding: Spacing.sm, fontSize: 14, color: Colors.textPrimary,
+    marginBottom: Spacing.sm, backgroundColor: Colors.background,
+  },
   barcodeRow:    { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center', marginBottom: Spacing.sm },
   scanBtn:       { backgroundColor: Colors.primaryLight, padding: Spacing.sm, borderRadius: Radius.md },
   modalActions:  { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm },

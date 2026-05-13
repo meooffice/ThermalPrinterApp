@@ -344,6 +344,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.xl,
     marginTop: Spacing.sm,
     elevation: 2,
+    marginBottom: 50,   
   },
   saveBtnDisabled: { backgroundColor: '#a5b4fc' },
   saveBtnIcon: { fontSize: 16 },
