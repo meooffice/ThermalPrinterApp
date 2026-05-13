@@ -8,7 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import CatalogService from '../services/CatalogService';
 import { Colors, Radius, Spacing, Typography } from '../constants/Theme'; 
-import { ScreenHeader, Card } from '../components/Ui';
+import { ScreenHeader, Card } from '../components/ui';
 
 const EMPTY_FORM = { name: '', category: 'General', barcode: '' };
 

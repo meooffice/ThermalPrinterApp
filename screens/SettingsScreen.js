@@ -8,7 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import SettingsService from '../services/SettingsService';
 import { Colors, Radius, Spacing, Typography } from '../constants/Theme'; 
-import { ScreenHeader, Card, SettingsRow } from '../components/Ui';
+import { ScreenHeader, Card, SettingsRow } from '../components/ui';
 
 export default function SettingsScreen({ navigation }) {
   const [settings, setSettings] = useState(null);

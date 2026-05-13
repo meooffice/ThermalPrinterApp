@@ -10,7 +10,7 @@ import BluetoothService from '../services/BluetoothService';
 import EscPosEncoder from '../services/EscPosEncoder';
 import SettingsService from '../services/SettingsService';
 import { Colors, Radius, Spacing, Typography } from '../constants/Theme'; 
-import { ScreenHeader, Card } from '../components/Ui';
+import { ScreenHeader, Card } from '../components/ui';
 
 
 export default function HistoryScreen() {

@@ -7,7 +7,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import SchoolService from '../services/SchoolService';
 import { Colors, Radius, Spacing, Typography } from '../constants/Theme'; 
-import { ScreenHeader, Card } from '../components/Ui';
+import { ScreenHeader, Card } from '../components/ui';
 
 const EMPTY_FORM = { name: '', udise: '', address: '' };
 

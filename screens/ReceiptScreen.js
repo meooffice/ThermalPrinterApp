@@ -14,7 +14,7 @@ import SchoolService from '../services/SchoolService';
 import CatalogService from '../services/CatalogService';
 import ShareService from '../services/ShareService';
 import { Colors, Radius, Spacing, Typography } from '../constants/Theme'; 
-import { ScreenHeader, Card, Stepper } from '../components/Ui';
+import { ScreenHeader, Card, Stepper } from '../components/ui';
 
 export default function ReceiptScreen() {
   const [settings, setSettings]         = useState(null);
