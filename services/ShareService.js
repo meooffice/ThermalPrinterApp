@@ -2,10 +2,20 @@
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
+// Names may contain & < > — escape them so the PDF layout cannot break
+const esc = (v) => String(v ?? '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// Size-wise lines (e.g. Shoes): { '20': 3, '21': -1 } -> "20x3, 21x-1"
+const sizeText = (sizes) => !sizes || typeof sizes !== 'object' ? '' : Object.keys(sizes)
+  .filter(s => parseInt(sizes[s], 10) !== 0 && !isNaN(parseInt(sizes[s], 10)))
+  .sort((a, b) => (parseFloat(a) - parseFloat(b)) || a.localeCompare(b))
+  .map(s => `${s}x${parseInt(sizes[s], 10)}`).join(', ');
+
 class ShareService {
 
   // Build HTML version of the receipt
-  buildReceiptHTML({ settings, school, spell, items, totalQty }) {
+  buildReceiptHTML({ settings, school, spell, items, totalQty, invoiceNo }) {
     const mandal   = settings?.shopName || 'Mandal';
     const now      = new Date();
     const dateStr  = now.toLocaleDateString();
@@ -15,7 +25,7 @@ class ShareService {
       .filter(i => i.name)
       .map(i => `
         <tr>
-          <td>${i.name}</td>
+          <td>${parseInt(i.count || 0, 10) < 0 ? '* ' : ''}${esc(i.name)}${sizeText(i.sizes) ? `<br/><span style="font-size:11px">Size: ${esc(sizeText(i.sizes))}</span>` : ''}</td>
           <td style="text-align:center">${i.count || 0}</td>
         </tr>
       `).join('');
@@ -82,9 +92,10 @@ class ShareService {
       </head>
       <body>
         <h1>SRKVM Kits</h1>
-        <h2>${mandal} Mandal</h2>
+        <h2>${esc(mandal)} Mandal</h2>
         <div class="divider-solid"></div>
 
+        ${invoiceNo ? `<div><strong>Invoice : ${esc(invoiceNo)}</strong></div>` : ''}
         <div>Date : ${dateStr}</div>
         <div>Time : ${timeStr}</div>
         <div><strong>Spell: Spell ${spell}</strong></div>
@@ -92,9 +103,9 @@ class ShareService {
 
         ${school ? `
           <div><strong>School:</strong></div>
-          <div>${school.name}</div>
-          ${school.udise ? `<div>UDISE : ${school.udise}</div>` : ''}
-          ${school.address ? `<div>${school.address}</div>` : ''}
+          <div>${esc(school.name)}</div>
+          ${school.udise ? `<div>UDISE : ${esc(school.udise)}</div>` : ''}
+          ${school.address ? `<div>${esc(school.address)}</div>` : ''}
           <div class="divider"></div>
         ` : ''}
 
@@ -131,7 +142,7 @@ class ShareService {
         </div>
 
         <div class="divider-solid"></div>
-        <div class="footer">${settings?.shopTagline || 'Thank you!'}</div>
+        <div class="footer">${esc(settings?.shopTagline || 'Thank you!')}</div>
       </body>
       </html>
     `;

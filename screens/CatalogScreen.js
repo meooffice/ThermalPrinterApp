@@ -2,18 +2,33 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, TextInput,
-  StyleSheet, Alert, Modal, ActivityIndicator, SafeAreaView,
+  StyleSheet, Alert, Modal, ActivityIndicator,
   KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import { read, utils } from 'xlsx';
 import CatalogService from '../services/CatalogService';
-import { Colors, Radius, Spacing, Typography } from '../constants/Theme'; 
-import { ScreenHeader, Card } from '../components/ui';
+import ItemTypeService from '../services/ItemTypeService';
+import TemplateService from '../services/TemplateService';
+import { itemEmoji, buildItemData, SUBTYPES, SUBTYPE_LABEL, effectiveClasses, formatSizes, parseSizes, parseCsvRows, rowsToItems } from '../services/ItemModel';
+import { Colors, Radius, Spacing, Typography } from '../constants/Theme';
+import { Card } from '../components/ui';
+import Hero from '../components/Hero';
 
-const EMPTY_FORM = { name: '', category: 'General', barcode: '' };
+const EMPTY_FORM = {
+  name: '', category: 'Others', barcode: '',
+  code: '', subType: 'Common', classFrom: '', classTo: '', semester: '',
+  sizesText: '', useNorms: false, norms: {},
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function CatalogScreen({ navigation }) {
+  const insets = useSafeAreaInsets(); // keep sheet buttons above the Android navigation bar
   const [items, setItems]               = useState([]);
   const [loading, setLoading]           = useState(true);
   const [modalVisible, setModal]        = useState(false);
@@ -21,26 +36,53 @@ export default function CatalogScreen({ navigation }) {
   const [form, setForm]                 = useState(EMPTY_FORM);
   const [scanning, setScanning]         = useState(false);
   const [search, setSearch]             = useState('');
+  const [catDropdown, setCatDropdown]   = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
+
+  // Upload state
+  const [uploading, setUploading]       = useState(false);
+  const [previewRows, setPreviewRows]   = useState(null);
+  const [previewModal, setPreviewModal] = useState(false);
+
+  // Item Types state
+  const [types, setTypes]           = useState([]);
+  const [typesModal, setTypesModal] = useState(false);
+  const [newType, setNewType]       = useState('');
+  const [typeBusy, setTypeBusy]     = useState(false);
+  const [templateBusy, setTemplateBusy] = useState(false);
 
   useFocusEffect(useCallback(() => { loadItems(); }, []));
 
   const loadItems = async () => {
     setLoading(true);
     setItems(await CatalogService.getAll());
+    setTypes(await ItemTypeService.getAll());
     setLoading(false);
   };
 
-  const openAdd  = () => { setEditItem(null); setForm(EMPTY_FORM); setModal(true); };
+  const openAdd  = () => { setEditItem(null); setForm(EMPTY_FORM); setCatDropdown(false); setModal(true); };
   const openEdit = (item) => {
     setEditItem(item);
-    setForm({ name: item.name, category: item.category || 'General', barcode: item.barcode || '' });
+    setForm({
+      name: item.name, category: item.category || 'Others', barcode: item.barcode || '',
+      code: item.code || '', subType: item.subType || 'Common',
+      classFrom: item.classFrom ? String(item.classFrom) : '',
+      classTo:   item.classTo   ? String(item.classTo)   : '',
+      semester:  item.semester  ? String(item.semester)  : '',
+      sizesText: formatSizes(item.sizes),
+      useNorms:  !!item.perStudent && Object.keys(item.perStudent).length > 0,
+      norms:     Object.fromEntries(Object.entries(item.perStudent || {}).map(([k, v]) => [k, String(v)])),
+    });
+    setCatDropdown(false);
     setModal(true);
   };
 
   const handleSave = async () => {
-    if (!form.name.trim()) { Alert.alert('Validation', 'Item name required.'); return; }
-    editItem ? await CatalogService.updateItem(editItem.id, form) : await CatalogService.addItem(form);
+    const built = buildItemData(form, items, editItem?.id);
+    if (built.error) { Alert.alert('Validation', built.error); return; }
+    editItem
+      ? await CatalogService.updateItem(editItem.id, built.data)
+      : await CatalogService.addItem(built.data);
     setModal(false);
     loadItems();
   };
@@ -48,7 +90,42 @@ export default function CatalogScreen({ navigation }) {
   const handleDelete = (id) => {
     Alert.alert('Delete', 'Item delete చేయాలా?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => { await CatalogService.deleteItem(id); loadItems(); } },
+      { text: 'Delete', style: 'destructive',
+        onPress: async () => { await CatalogService.deleteItem(id); loadItems(); } },
+    ]);
+  };
+
+  const handleTemplate = async () => {
+    try {
+      setTemplateBusy(true);
+      await TemplateService.shareItemsTemplate();
+    } catch (e) {
+      Alert.alert('Template', e.message);
+    } finally {
+      setTemplateBusy(false);
+    }
+  };
+
+  const handleAddType = async () => {
+    try {
+      setTypeBusy(true);
+      setTypes(await ItemTypeService.add(newType));
+      setNewType('');
+    } catch (e) {
+      Alert.alert('Type', e.message);
+    } finally {
+      setTypeBusy(false);
+    }
+  };
+
+  const handleDeleteType = (name) => {
+    Alert.alert('Delete', `"${name}" Type delete చేయాలా?`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive',
+        onPress: async () => {
+          try { setTypes(await ItemTypeService.remove(name)); }
+          catch (e) { Alert.alert('Delete కాదు', e.message); }
+        } },
     ]);
   };
 
@@ -60,16 +137,101 @@ export default function CatalogScreen({ navigation }) {
     setScanning(true);
   };
 
+  // ── Bulk Upload ─────────────────────────────────────────────────────────────
+
+  const handleUpload = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['*/*'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) return;
+
+      const asset    = result.assets[0];
+      const fileName = asset.name?.toLowerCase() ?? '';
+      setUploading(true);
+
+      let rawRows = [];
+
+      if (fileName.endsWith('.csv')) {
+        const text = await FileSystem.readAsStringAsync(asset.uri);
+        rawRows = parseCsvRows(text);
+
+      } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+        const base64 = await FileSystem.readAsStringAsync(asset.uri, {
+          encoding: 'base64',
+        });
+        const workbook = read(base64, { type: 'base64' });
+        const sheetName = workbook.SheetNames.includes('Items') ? 'Items' : workbook.SheetNames[0];
+        rawRows = utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+
+      } else {
+        Alert.alert('Unsupported File', 'దయచేసి .csv లేదా .xlsx file select చేయండి.');
+        setUploading(false);
+        return;
+      }
+
+      setUploading(false);
+
+      const rows = rowsToItems(rawRows, types, items);
+      if (rows.length === 0) {
+        Alert.alert('Empty File', 'File లో valid data లేదు.\nColumns: Code, Name, Type, SubType, ClassFrom, ClassTo, Semester, Sizes, Barcode, N1–N12');
+        return;
+      }
+
+      setPreviewRows(rows);
+      setPreviewModal(true);
+
+    } catch (err) {
+      setUploading(false);
+      Alert.alert('Error', 'File read చేయడంలో error వచ్చింది.\n' + err.message);
+    }
+  };
+
+  const confirmUpload = async () => {
+    const ok = (previewRows || []).filter(r => r.status !== 'error');
+    if (ok.length === 0) return;
+    setPreviewModal(false);
+    setUploading(true);
+    try {
+      const { added, updated } = await CatalogService.bulkUpsert(ok.map(r => ({ id: r.id, data: r.data })));
+      const skipped = previewRows.length - ok.length;
+      await loadItems();
+      Alert.alert(
+        'Upload Complete ✅',
+        `${added} కొత్త items add, ${updated} items update అయ్యాయి.${skipped ? `\n${skipped} rows లో తప్పులు ఉన్నాయి, అవి skip అయ్యాయి.` : ''}`,
+      );
+    } catch (err) {
+      Alert.alert('❌ Import Failed', err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+
   const filtered = items.filter(i =>
     i.name.toLowerCase().includes(search.toLowerCase()) ||
-    (i.barcode && i.barcode.includes(search))
+    (i.code && i.code.toLowerCase().includes(search.toLowerCase())) ||
+    (i.barcode && i.barcode.includes(search)),
   );
+
+  // Classes shown in the per-class counts table
+  const normClasses = (() => {
+    const a = parseInt(form.classFrom, 10), b = parseInt(form.classTo, 10);
+    return (a >= 1 && b <= 12 && a <= b) ? effectiveClasses(a, b) : effectiveClasses(null, null);
+  })();
+  const sizesPreview = parseSizes(form.sizesText);
+  const pvNew = (previewRows || []).filter(r => r.status === 'new').length;
+  const pvUpd = (previewRows || []).filter(r => r.status === 'update').length;
+  const pvErr = (previewRows || []).filter(r => r.status === 'error').length;
 
   const renderItem = ({ item }) => (
     <Card style={styles.itemCard}>
       <View style={styles.cardLeft}>
         <View style={styles.itemIcon}>
-          <Text style={{ fontSize: 22 }}>📦</Text>
+          <Text style={{ fontSize: 22 }}>{itemEmoji(item)}</Text>
         </View>
         <View style={styles.itemInfo}>
           <Text style={styles.itemName}>{item.name}</Text>
@@ -77,6 +239,17 @@ export default function CatalogScreen({ navigation }) {
             <View style={styles.categoryBadge}>
               <Text style={styles.categoryText}>🏷️ {item.category}</Text>
             </View>
+            {item.code ? <Text style={styles.barcodeText}>🔖 {item.code}</Text> : null}
+            {item.subType && item.subType !== 'Common' ? (
+              <View style={styles.categoryBadge}>
+                <Text style={styles.categoryText}>{item.subType === 'Boys' ? '👦 Boys' : '👧 Girls'}</Text>
+              </View>
+            ) : null}
+            {item.classFrom ? (
+              <Text style={styles.barcodeText}>🎓 {item.classFrom === item.classTo ? item.classFrom : `${item.classFrom}–${item.classTo}`}</Text>
+            ) : null}
+            {item.semester ? <Text style={styles.barcodeText}>SEM{item.semester}</Text> : null}
+            {item.sizes && item.sizes.length > 0 ? <Text style={styles.barcodeText}>📏 {item.sizes.length} sizes</Text> : null}
             {item.barcode ? <Text style={styles.barcodeText}>📷 {item.barcode}</Text> : null}
           </View>
         </View>
@@ -94,8 +267,8 @@ export default function CatalogScreen({ navigation }) {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safe}>
-        <ScreenHeader title="Item Catalog" subtitle="Manage kit items" />
+      <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
+        <Hero title="Item Catalog" subtitle="Manage kit items" />
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
@@ -104,8 +277,8 @@ export default function CatalogScreen({ navigation }) {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <ScreenHeader title="Item Catalog" subtitle={`${items.length} items available`} />
+    <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
+      <Hero title="Item Catalog" subtitle="Manage kit items" info={`${items.length} items available`} />
 
       <View style={styles.container}>
 
@@ -114,11 +287,38 @@ export default function CatalogScreen({ navigation }) {
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Text style={styles.backBtnText}>‹  Back</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
-            <Text style={styles.addBtnIcon}>＋</Text>
-            <Text style={styles.addBtnText}>Add Item</Text>
-          </TouchableOpacity>
+          <View style={styles.topActions}>
+            {/* Upload button */}
+            <TouchableOpacity
+              style={styles.uploadBtn}
+              onPress={handleUpload}
+              disabled={uploading}
+            >
+              {uploading
+                ? <ActivityIndicator size="small" color={Colors.primary} />
+                : <Text style={styles.uploadBtnText}>📂  Upload</Text>
+              }
+            </TouchableOpacity>
+            {/* Add button */}
+            <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
+              <Text style={styles.addBtnIcon}>＋</Text>
+              <Text style={styles.addBtnText}>Add Item</Text>
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {/* Format hint */}
+        <Text style={styles.uploadHint}>
+          📄 CSV / Excel upload · Columns: Code, Name, Type, SubType, ClassFrom, ClassTo, Semester, Sizes, Barcode, N1–N12
+        </Text>
+        <TouchableOpacity style={styles.typesLink} onPress={handleTemplate} disabled={templateBusy}>
+          {templateBusy
+            ? <ActivityIndicator size="small" color={Colors.primary} />
+            : <Text style={styles.typesLinkText}>📥  Excel Template Download</Text>}
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.typesLink} onPress={() => setTypesModal(true)}>
+          <Text style={styles.typesLinkText}>🏷️  Item Types నిర్వహించు ({types.length})</Text>
+        </TouchableOpacity>
 
         {/* Search */}
         <View style={styles.searchBox}>
@@ -142,7 +342,7 @@ export default function CatalogScreen({ navigation }) {
           <View style={styles.centered}>
             <Text style={styles.emptyEmoji}>📦</Text>
             <Text style={styles.emptyTitle}>No items yet</Text>
-            <Text style={styles.emptyHint}>+ Add Item button తో items add చేయండి</Text>
+            <Text style={styles.emptyHint}>+ Add Item లేదా 📂 Upload తో add చేయండి</Text>
           </View>
         ) : (
           <FlatList
@@ -155,38 +355,26 @@ export default function CatalogScreen({ navigation }) {
         )}
       </View>
 
-      {/*
-        FIX 2: Add/Edit Modal — form above keyboard.
-        Same pattern as SchoolScreen:
-        KeyboardAvoidingView wraps the sheet so it lifts when
-        the keyboard opens. ScrollView inside allows scrolling
-        if fields are still cramped.
-      */}
+      {/* ── Add/Edit Modal ────────────────────────────────────────────────── */}
       <Modal
         visible={modalVisible}
         animationType="slide"
         transparent
         onRequestClose={() => setModal(false)}
       >
-        <KeyboardAvoidingView
-          style={styles.modalKAV}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
+        <View style={styles.modalKAV}>
           <TouchableOpacity
             style={styles.modalBackdrop}
             activeOpacity={1}
-            onPress={() => setModal(false)}
+            onPress={() => { setCatDropdown(false); setModal(false); }}
           />
-          <View style={styles.modalSheet}>
+          <View style={[styles.modalSheet, styles.modalSheetTall, { paddingBottom: Spacing.lg + insets.bottom }]}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>
               {editItem ? '✏️  Edit Item' : '📦  Add Item'}
             </Text>
 
-            <ScrollView
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
+            <ScrollView style={styles.sheetScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <Text style={styles.inputLabel}>Item Name *</Text>
               <TextInput
                 style={styles.input}
@@ -197,15 +385,144 @@ export default function CatalogScreen({ navigation }) {
                 returnKeyType="next"
               />
 
+              {/* Category Dropdown */}
               <Text style={styles.inputLabel}>Category</Text>
+              <TouchableOpacity
+                style={styles.dropdownTrigger}
+                onPress={() => setCatDropdown(prev => !prev)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.dropdownValue}>🏷️  {form.category}</Text>
+                <Text style={styles.dropdownArrow}>{catDropdown ? '▲' : '▼'}</Text>
+              </TouchableOpacity>
+
+              {catDropdown && (
+                <View style={styles.dropdownList}>
+                  {types.map(cat => (
+                    <TouchableOpacity
+                      key={cat}
+                      style={[
+                        styles.dropdownOption,
+                        form.category === cat && styles.dropdownOptionActive,
+                      ]}
+                      onPress={() => { setForm({ ...form, category: cat }); setCatDropdown(false); }}
+                    >
+                      <Text style={[
+                        styles.dropdownOptionText,
+                        form.category === cat && styles.dropdownOptionTextActive,
+                      ]}>
+                        {form.category === cat ? '✓  ' : '      '}{cat}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              <Text style={styles.inputLabel}>Code (optional, unique)</Text>
               <TextInput
                 style={styles.input}
-                value={form.category}
-                onChangeText={v => setForm({ ...form, category: v })}
-                placeholder="e.g. Stationery, Books"
+                value={form.code}
+                onChangeText={v => setForm({ ...form, code: v })}
+                placeholder="e.g. 1-TELTB-SEM1"
+                autoCapitalize="characters"
                 placeholderTextColor={Colors.textMuted}
-                returnKeyType="next"
               />
+
+              <Text style={styles.inputLabel}>ఎవరికి</Text>
+              <View style={styles.subRow}>
+                {SUBTYPES.map(s => (
+                  <TouchableOpacity
+                    key={s}
+                    style={[styles.subPill, form.subType === s && styles.subPillActive]}
+                    onPress={() => setForm({ ...form, subType: s })}
+                  >
+                    <Text style={[styles.subPillText, form.subType === s && styles.subPillTextActive]}>
+                      {SUBTYPE_LABEL[s]}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.inputLabel}>తరగతి From – To (ఖాళీ = school లోని అన్ని తరగతులు)</Text>
+              <View style={styles.barcodeRow}>
+                <TextInput
+                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                  value={form.classFrom}
+                  onChangeText={v => setForm({ ...form, classFrom: v.replace(/[^0-9]/g, '') })}
+                  placeholder="From (1-12)"
+                  keyboardType="numeric"
+                  maxLength={2}
+                  placeholderTextColor={Colors.textMuted}
+                />
+                <Text style={styles.rangeDash}>–</Text>
+                <TextInput
+                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                  value={form.classTo}
+                  onChangeText={v => setForm({ ...form, classTo: v.replace(/[^0-9]/g, '') })}
+                  placeholder="To (1-12)"
+                  keyboardType="numeric"
+                  maxLength={2}
+                  placeholderTextColor={Colors.textMuted}
+                />
+              </View>
+
+              <Text style={styles.inputLabel}>Semester (optional, 1-4)</Text>
+              <TextInput
+                style={styles.input}
+                value={form.semester}
+                onChangeText={v => setForm({ ...form, semester: v.replace(/[^0-9]/g, '') })}
+                placeholder="e.g. 1"
+                keyboardType="numeric"
+                maxLength={1}
+                placeholderTextColor={Colors.textMuted}
+              />
+
+              <Text style={styles.inputLabel}>Sizes (optional)</Text>
+              <TextInput
+                style={[styles.input, { marginBottom: Spacing.xs }]}
+                value={form.sizesText}
+                onChangeText={v => setForm({ ...form, sizesText: v })}
+                placeholder="S,M,L  లేదా  15-32"
+                autoCapitalize="characters"
+                placeholderTextColor={Colors.textMuted}
+              />
+              {form.sizesText.trim() ? (
+                <Text style={[styles.sizesInfo, sizesPreview.error && { color: Colors.danger }]}>
+                  {sizesPreview.error ? sizesPreview.error : `📏 ${sizesPreview.list.length} sizes: ${sizesPreview.list.join(', ')}`}
+                </Text>
+              ) : null}
+
+              <TouchableOpacity
+                style={styles.normToggle}
+                onPress={() => setForm({ ...form, useNorms: !form.useNorms })}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.normBox, form.useNorms && styles.normBoxActive]}>
+                  {form.useNorms ? <Text style={styles.normTick}>✓</Text> : null}
+                </View>
+                <Text style={styles.normToggleText}>తరగతి వారీ సంఖ్య (ప్రతి విద్యార్థికి)</Text>
+              </TouchableOpacity>
+              {form.useNorms && (
+                <View style={styles.normPanel}>
+                  <Text style={styles.normHint}>ఖాళీ = 1 · 0 = ఇవ్వరు</Text>
+                  <View style={styles.normGrid}>
+                    {normClasses.map(cl => (
+                      <View key={cl} style={styles.normCell}>
+                        <Text style={styles.normClass}>తరగతి {cl}</Text>
+                        <TextInput
+                          style={styles.normInput}
+                          value={String((form.norms || {})[cl] ?? '')}
+                          onChangeText={v => setForm({ ...form, norms: { ...form.norms, [cl]: v.replace(/[^0-9]/g, '') } })}
+                          keyboardType="numeric"
+                          maxLength={2}
+                          placeholder="1"
+                          placeholderTextColor={Colors.textMuted}
+                        />
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
 
               <Text style={styles.inputLabel}>Barcode (optional)</Text>
               <View style={styles.barcodeRow}>
@@ -232,10 +549,52 @@ export default function CatalogScreen({ navigation }) {
               </TouchableOpacity>
             </View>
           </View>
+        </View>
+      </Modal>
+
+      {/* ── Item Types Modal ──────────────────────────────────────────────── */}
+      <Modal visible={typesModal} animationType="slide" transparent onRequestClose={() => setTypesModal(false)}>
+        <KeyboardAvoidingView style={styles.modalKAV} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setTypesModal(false)} />
+          <View style={[styles.modalSheet, { height: '70%' }, { paddingBottom: Spacing.lg + insets.bottom }]}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>🏷️  Item Types</Text>
+            <ScrollView keyboardShouldPersistTaps="handled" style={{ flex: 1, marginBottom: Spacing.sm }}>
+              {types.map(t => (
+                <View key={t} style={styles.typeRow}>
+                  <Text style={styles.typeName}>{t}</Text>
+                  {t !== 'Others' && (
+                    <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteType(t)}>
+                      <Text style={{ fontSize: 16 }}>🗑️</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ))}
+            </ScrollView>
+            <View style={styles.barcodeRow}>
+              <TextInput
+                style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                value={newType}
+                onChangeText={setNewType}
+                placeholder="కొత్త Type పేరు"
+                placeholderTextColor={Colors.textMuted}
+                returnKeyType="done"
+                onSubmitEditing={handleAddType}
+              />
+              <TouchableOpacity style={styles.scanBtn} onPress={handleAddType} disabled={typeBusy}>
+                {typeBusy
+                  ? <ActivityIndicator size="small" color={Colors.primary} />
+                  : <Text style={styles.addTypeBtnText}>＋ Add</Text>}
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={[styles.cancelBtn, { marginTop: Spacing.md }]} onPress={() => setTypesModal(false)}>
+              <Text style={styles.cancelBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── Barcode Scanner Modal ── */}
+      {/* ── Barcode Scanner Modal ─────────────────────────────────────────── */}
       <Modal visible={scanning} animationType="slide" onRequestClose={() => setScanning(false)}>
         <View style={styles.scannerContainer}>
           <View style={styles.scannerHeader}>
@@ -257,21 +616,135 @@ export default function CatalogScreen({ navigation }) {
         </View>
       </Modal>
 
+      {/* ── Upload Preview Modal ──────────────────────────────────────────── */}
+      <Modal
+        visible={previewModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setPreviewModal(false)}
+      >
+        <View style={styles.modalKAV}>
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setPreviewModal(false)}
+          />
+          <View style={[styles.modalSheet, { height: '80%' }, { paddingBottom: Spacing.lg + insets.bottom }]}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>
+              📋  Preview — {previewRows?.length} rows
+            </Text>
+            <Text style={styles.previewHint}>
+              దిగువ items మీ catalog లో add / update అవుతాయి. ఎరుపు rows (తప్పులు) skip అవుతాయి.
+            </Text>
+
+            <Text style={styles.previewSummary}>
+              🆕 కొత్తవి {pvNew}  ·  🔄 Update {pvUpd}  ·  ❌ తప్పులు {pvErr}
+            </Text>
+
+            <View style={[styles.modalActions, { marginTop: 0, marginBottom: Spacing.sm }]}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setPreviewModal(false)}>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.saveBtn, pvNew + pvUpd === 0 && styles.saveBtnOff]}
+                onPress={confirmUpload}
+                disabled={pvNew + pvUpd === 0}
+              >
+                <Text style={styles.saveBtnText}>✅  Confirm Import</Text>
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              data={previewRows}
+              keyExtractor={(_, i) => String(i)}
+              initialNumToRender={6}
+              maxToRenderPerBatch={8}
+              windowSize={5}
+              showsVerticalScrollIndicator
+              style={{ flex: 1, marginBottom: Spacing.md }}
+              contentContainerStyle={{ paddingBottom: 120 }}
+              renderItem={({ item: row, index: i }) => (
+                <View key={i} style={styles.previewRow}>
+                  <Text style={styles.previewIndex}>{row.rowNo}</Text>
+                  <View style={{ flex: 1 }}>
+                    <View style={[
+                      styles.badge,
+                      { backgroundColor: row.status === 'error' ? Colors.dangerBg : row.status === 'update' ? Colors.primaryLight : Colors.successBg },
+                    ]}>
+                      <Text style={[
+                        styles.badgeText,
+                        { color: row.status === 'error' ? Colors.danger : row.status === 'update' ? Colors.primary : Colors.successText },
+                      ]}>
+                        {row.status === 'error' ? 'ERROR' : row.status === 'update' ? 'UPDATE' : 'NEW'}
+                      </Text>
+                    </View>
+                    <Text style={styles.previewName}>{row.name || '(పేరు లేదు)'}</Text>
+                    {row.code ? <Text style={styles.previewMeta}>🔖 {row.code}</Text> : null}
+                    {row.status !== 'error' ? (
+                      <Text style={styles.previewMeta}>
+                        🏷️ {row.category} · {row.data.subType}
+                        {row.data.classFrom ? ` · 🎓 ${row.data.classFrom}–${row.data.classTo}` : ''}
+                        {row.data.sizes && row.data.sizes.length ? ` · 📏 ${row.data.sizes.length} sizes` : ''}
+                      </Text>
+                    ) : (
+                      <Text style={styles.previewError}>{row.error}</Text>
+                    )}
+                  </View>
+                </View>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
+
+// ── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   safe:      { flex: 1, backgroundColor: Colors.background },
   container: { flex: 1, paddingHorizontal: Spacing.lg },
   centered:  { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  topRow:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: Spacing.md },
-  backBtn:     { flexDirection: 'row', alignItems: 'center' },
-  backBtnText: { fontSize: 16, color: Colors.primary, fontWeight: '600' },
-  addBtn:      { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, backgroundColor: Colors.primary, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.lg },
-  addBtnIcon:  { fontSize: 14, color: Colors.primaryText, fontWeight: '700' },
-  addBtnText:  { color: Colors.primaryText, fontWeight: '700', fontSize: 13 },
+  topRow:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: Spacing.md },
+  backBtn:    { flexDirection: 'row', alignItems: 'center' },
+  backBtnText:{ fontSize: 16, color: Colors.primary, fontWeight: '600' },
+  topActions: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' },
+
+  uploadBtn:     { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: Colors.primary, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.lg },
+  uploadBtnText: { color: Colors.primary, fontWeight: '700', fontSize: 13 },
+
+  addBtn:     { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, backgroundColor: Colors.primary, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.lg },
+  addBtnIcon: { fontSize: 14, color: Colors.primaryText, fontWeight: '700' },
+  addBtnText: { color: Colors.primaryText, fontWeight: '700', fontSize: 13 },
+
+  uploadHint: { fontSize: 11, color: Colors.textMuted, marginBottom: Spacing.sm },
+  typesLink:     { alignSelf: 'flex-start', marginBottom: Spacing.sm },
+  subRow:        { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.sm },
+  subPill:       { flex: 1, paddingVertical: Spacing.sm, paddingHorizontal: Spacing.xs, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.cardBorder, alignItems: 'center', backgroundColor: Colors.background },
+  subPillActive: { backgroundColor: Colors.primaryLight, borderColor: Colors.primary },
+  subPillText:   { fontSize: 11, fontWeight: '700', color: Colors.textMuted, textAlign: 'center' },
+  subPillTextActive: { color: Colors.primary },
+  rangeDash:     { fontSize: 18, color: Colors.textMuted },
+  sizesInfo:     { fontSize: 11, color: Colors.primary, marginBottom: Spacing.sm },
+  normToggle:    { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginVertical: Spacing.sm },
+  normBox:       { width: 22, height: 22, borderRadius: Radius.sm, borderWidth: 2, borderColor: Colors.cardBorder, alignItems: 'center', justifyContent: 'center' },
+  normBoxActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  normTick:      { color: Colors.primaryText, fontSize: 12, fontWeight: '700' },
+  normToggleText:{ flex: 1, fontSize: 13, fontWeight: '600', color: Colors.textPrimary },
+  normPanel:     { backgroundColor: Colors.background, borderRadius: Radius.md, padding: Spacing.sm, marginBottom: Spacing.sm },
+  normHint:      { fontSize: 11, color: Colors.textMuted, marginBottom: Spacing.xs },
+  normGrid:      { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
+  normCell:      { width: '30%', alignItems: 'center' },
+  normClass:     { fontSize: 10, color: Colors.textSecondary, marginBottom: 2 },
+  normInput:     { borderWidth: 1, borderColor: Colors.primary, borderRadius: Radius.sm, width: '100%', paddingVertical: Spacing.xs, textAlign: 'center', fontSize: 14, fontWeight: '700', color: Colors.primary, backgroundColor: Colors.surface },
+  typesLinkText: { fontSize: 12, color: Colors.primary, fontWeight: '700' },
+  typeRow:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: Spacing.sm, borderBottomWidth: 0.5, borderBottomColor: Colors.cardBorder },
+  typeName:      { fontSize: 14, fontWeight: '600', color: Colors.textPrimary },
+  addTypeBtnText:{ color: Colors.primary, fontWeight: '700', fontSize: 13 },
 
   searchBox: {
     flexDirection: 'row', alignItems: 'center',
@@ -299,28 +772,19 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary, marginBottom: Spacing.xs },
   emptyHint:  { ...Typography.bodySm, textAlign: 'center' },
 
-  // FIX 2 — Modal + KAV layout
-  modalKAV: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
+  // Modal
+  modalKAV:      { flex: 1, justifyContent: 'flex-end' },
+  modalSheetTall: { height: '85%' },
+  sheetScroll:    { flex: 1 },
+  modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
   modalSheet: {
     backgroundColor: Colors.surface,
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
+    borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl,
     padding: Spacing.lg,
     paddingBottom: Platform.OS === 'ios' ? 36 : Spacing.lg,
     maxHeight: '85%',
   },
-  modalHandle: {
-    width: 40, height: 4, borderRadius: 2,
-    backgroundColor: Colors.cardBorder,
-    alignSelf: 'center', marginBottom: Spacing.md,
-  },
+  modalHandle:   { width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.cardBorder, alignSelf: 'center', marginBottom: Spacing.md },
   modalTitle:    { fontSize: 20, fontWeight: '800', color: Colors.primaryDark, marginBottom: Spacing.md },
   inputLabel:    { ...Typography.label, marginBottom: Spacing.xs, marginTop: Spacing.xs },
   input: {
@@ -328,6 +792,25 @@ const styles = StyleSheet.create({
     padding: Spacing.sm, fontSize: 14, color: Colors.textPrimary,
     marginBottom: Spacing.sm, backgroundColor: Colors.background,
   },
+
+  // Category Dropdown
+  dropdownTrigger: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderWidth: 1, borderColor: Colors.primary, borderRadius: Radius.md,
+    padding: Spacing.sm, marginBottom: Spacing.xs, backgroundColor: Colors.primaryLight,
+  },
+  dropdownValue:            { fontSize: 14, fontWeight: '600', color: Colors.primary },
+  dropdownArrow:            { fontSize: 12, color: Colors.primary },
+  dropdownList: {
+    borderWidth: 1, borderColor: Colors.cardBorder, borderRadius: Radius.md,
+    backgroundColor: Colors.surface, marginBottom: Spacing.sm,
+    overflow: 'hidden', elevation: 3,
+  },
+  dropdownOption:           { paddingVertical: Spacing.sm, paddingHorizontal: Spacing.md, borderBottomWidth: 0.5, borderBottomColor: Colors.cardBorder },
+  dropdownOptionActive:     { backgroundColor: Colors.primaryLight },
+  dropdownOptionText:       { fontSize: 14, color: Colors.textPrimary },
+  dropdownOptionTextActive: { color: Colors.primary, fontWeight: '700' },
+
   barcodeRow:    { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center', marginBottom: Spacing.sm },
   scanBtn:       { backgroundColor: Colors.primaryLight, padding: Spacing.sm, borderRadius: Radius.md },
   modalActions:  { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm },
@@ -344,4 +827,16 @@ const styles = StyleSheet.create({
   camera:           { flex: 1 },
   cancelScanBtn:    { backgroundColor: Colors.danger, padding: Spacing.md, margin: Spacing.lg, borderRadius: Radius.lg, alignItems: 'center' },
   cancelScanText:   { color: '#fff', fontWeight: '700', fontSize: 16 },
+
+  // Preview modal
+  previewHint:  { fontSize: 12, color: Colors.textMuted, marginBottom: Spacing.sm },
+  previewRow:   { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm, paddingVertical: Spacing.sm, borderBottomWidth: 0.5, borderBottomColor: Colors.cardBorder },
+  previewIndex: { fontSize: 12, color: Colors.textMuted, width: 24, paddingTop: 2 },
+  previewName:  { fontSize: 13, fontWeight: '700', color: Colors.textPrimary },
+  previewMeta:  { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
+  previewError: { fontSize: 11, color: Colors.danger, marginTop: 2 },
+  previewSummary: { fontSize: 12, fontWeight: '600', color: Colors.textSecondary, marginBottom: Spacing.sm },
+  badge:        { paddingHorizontal: 6, paddingVertical: 1, borderRadius: Radius.sm, alignSelf: 'flex-start', marginBottom: 2 },
+  badgeText:    { fontSize: 10, fontWeight: '700' },
+  saveBtnOff:   { backgroundColor: '#a5b4fc' },
 });

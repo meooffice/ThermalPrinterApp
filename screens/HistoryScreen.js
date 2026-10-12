@@ -2,81 +2,82 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, SafeAreaView,
+  Alert, ActivityIndicator, TextInput,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import ReceiptHistory from '../services/ReceiptHistory';
 import BluetoothService from '../services/BluetoothService';
-import EscPosEncoder from '../services/EscPosEncoder';
+import { buildReceiptBase64 } from '../services/ReceiptPrinter';
 import SettingsService from '../services/SettingsService';
 import { Colors, Radius, Spacing, Typography } from '../constants/Theme'; 
-import { ScreenHeader, Card } from '../components/ui';
+import { Card } from '../components/ui';
+import Hero from '../components/Hero';
 
 
 export default function HistoryScreen() {
   const [history, setHistory]   = useState([]);
   const [loading, setLoading]   = useState(true);
   const [printing, setPrinting] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [search, setSearch]     = useState('');
 
   useFocusEffect(useCallback(() => { loadHistory(); }, []));
 
   const loadHistory = async () => {
     setLoading(true);
-    setHistory(await ReceiptHistory.getAll());
-    setLoading(false);
+    setLoadError(null);
+    try {
+      setHistory(await ReceiptHistory.getAll());
+    } catch (e) {
+      setLoadError(e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  // Old (legacy / test) receipts only: permanent delete
   const handleDelete = (id) => {
-    Alert.alert('Delete', 'Receipt delete చేయాలా?', [
+    Alert.alert('Delete', 'ఈ పాత receipt ను శాశ్వతంగా delete చేయాలా?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => { await ReceiptHistory.delete(id); loadHistory(); } },
+      { text: 'Delete', style: 'destructive',
+        onPress: async () => {
+          try { await ReceiptHistory.delete(id); loadHistory(); }
+          catch (e) { Alert.alert('Delete కాదు', e.message); }
+        } },
     ]);
   };
 
-  const handleReprint = async (receipt) => {
+  // New receipts: Cancel (stays in the list, invoice number remains accounted for)
+  const handleCancel = (entry) => {
+    Alert.alert(
+      'Receipt Cancel చేయాలా?',
+      `${entry.invoiceNo || ''}\n${entry.schoolName}\n\nCancel చేస్తే ఈ రశీదు లెక్క నుండి తొలగిపోతుంది. తిరిగి మార్చలేరు.`,
+      [
+        { text: 'వెనక్కి', style: 'cancel' },
+        { text: 'Cancel Receipt', style: 'destructive',
+          onPress: async () => {
+            try { await ReceiptHistory.cancel(entry.id); loadHistory(); }
+            catch (e) { Alert.alert('Cancel కాదు', e.message); }
+          } },
+      ],
+    );
+  };
+
+  const handleReprint = async (entry) => {
+    if (printing) return;                       // a reprint is already running
     try {
-      const connected = await BluetoothService.isConnected();
+      setPrinting(entry.id);                // also shown while a dropped printer is being reconnected
+      const connected = await BluetoothService.ensureConnected();
       if (!connected) { Alert.alert('Not Connected', 'Printer connect చేయండి.'); return; }
-      setPrinting(receipt.id);
+      const receipt = await ReceiptHistory.get(entry.id);   // full receipt is loaded only when needed
+      if (!receipt) { Alert.alert('❌ Failed', 'రశీదు data కనబడలేదు.'); return; }
       const settings = await SettingsService.get();
-      const encoder  = new EscPosEncoder();
-      const width    = settings?.paperWidth || 32;
-
-      encoder.initialize()
-        .align('center').bold(true).size('double')
-        .text('SRKVM Kits').newline()
-        .size('normal').text(`${settings?.shopName || ''} Mandal`).newline()
-        .bold(false).divider('=', width).align('left');
-
-      const date = new Date(receipt.savedAt);
-      encoder
-        .text(`Date : ${date.toLocaleDateString()}`).newline()
-        .text(`Time : ${date.toLocaleTimeString()}`).newline()
-        .bold(true).text(`Spell: Spell ${receipt.spell || 1}`).newline()
-        .bold(false).divider('-', width);
-
-      if (receipt.school) {
-        encoder.bold(true).text('School:').bold(false).newline()
-          .text(receipt.school.name || '').newline();
-        if (receipt.school.udise) encoder.text(`UDISE : ${receipt.school.udise}`).newline();
-      }
-
-      encoder.divider('-', width);
-      const countCol = 6, nameCol = width - countCol - 1;
-      encoder.bold(true).text('Item'.padEnd(nameCol) + 'Count').newline().bold(false).divider('-', width);
-      (receipt.items || []).forEach(item => {
-        encoder.text((item.name || '').substring(0, nameCol).padEnd(nameCol) + String(item.count || 0).padStart(countCol)).newline();
+      const data = await buildReceiptBase64({
+        settings, school: receipt.school, spell: receipt.spell || 1, items: receipt.items || [],
+        invoiceNo: receipt.invoiceNo, when: new Date(receipt.savedAt), duplicate: true,
       });
-
-      const totalQty = (receipt.items || []).reduce((sum, i) => sum + parseInt(i.count || 0), 0);
-      encoder.divider('-', width)
-        .row('Total Items :', String((receipt.items || []).length), width)
-        .bold(true).row('Total Qty   :', String(totalQty), width).bold(false)
-        .divider('=', width).align('center')
-        .text(settings?.shopTagline || 'Thank you!').newline()
-        .newline(3).cut();
-
-      await BluetoothService.sendBase64(encoder.encodeBase64());
+      await BluetoothService.sendBase64(data);
       Alert.alert('✅ Success', 'Reprinted successfully!');
     } catch (error) {
       Alert.alert('❌ Failed', error.message);
@@ -85,75 +86,108 @@ export default function HistoryScreen() {
     }
   };
 
-  const handleClearAll = () => {
-    Alert.alert('Clear All', 'All history delete చేయాలా?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Clear All', style: 'destructive', onPress: async () => { await ReceiptHistory.clear(); loadHistory(); } },
-    ]);
-  };
-
   const formatDate = (iso) => {
     const d = new Date(iso);
     return `${d.toLocaleDateString()} · ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   };
 
-  const renderItem = ({ item }) => (
-    // ui.js → Card
-    <Card style={styles.historyCard}>
-      {/* Card Header */}
-      <View style={styles.cardHeader}>
-        <View style={styles.cardIconWrap}>
-          <Text style={{ fontSize: 20 }}>🏫</Text>
-        </View>
-        <View style={styles.cardInfo}>
-          <Text style={styles.schoolName}>{item.school?.name || item.shopName || 'Receipt'}</Text>
-          <Text style={styles.dateText}>🕐 {formatDate(item.savedAt)}</Text>
-        </View>
-        <View style={styles.spellBadge}>
-          <Text style={styles.spellBadgeText}>Spell {item.spell || 1}</Text>
-        </View>
-      </View>
+  const q = search.trim().toLowerCase();
+  const visible = q === '' ? history : history.filter(r =>
+    (r.invoiceNo || '').toLowerCase().includes(q) ||
+    (r.schoolName || '').toLowerCase().includes(q) ||
+    (r.udise || '').includes(q));
 
-      {/* Meta */}
-      <View style={styles.cardMeta}>
-        <View style={styles.metaChip}>
-          <Text style={styles.metaChipText}>📦 {(item.items || []).length} items</Text>
-        </View>
-        <View style={styles.metaChip}>
-          <Text style={styles.metaChipText}>🔢 {(item.items || []).reduce((s, i) => s + parseInt(i.count || 0), 0)} qty</Text>
-        </View>
-      </View>
-
-      {/* Actions */}
-      <View style={styles.cardActions}>
-        <TouchableOpacity
-          style={styles.reprintBtn}
-          onPress={() => handleReprint(item)}
-          disabled={printing !== null}
-        >
-          {printing === item.id
-            ? <ActivityIndicator color={Colors.primary} size="small" />
-            : (
-              <View style={styles.actionBtnInner}>
-                <Text style={styles.reprintIcon}>🖨️</Text>
-                <Text style={styles.reprintText}>Reprint</Text>
-              </View>
-            )}
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item.id)}>
-          <View style={styles.actionBtnInner}>
-            <Text style={styles.deleteIcon}>🗑️</Text>
-            <Text style={styles.deleteText}>Delete</Text>
+  const renderItem = ({ item }) => {
+    const cancelled = item.status === 'cancelled';
+    return (
+      // ui.js → Card
+      <Card style={[styles.historyCard, cancelled && styles.historyCardCancelled]}>
+        {/* Card Header */}
+        <View style={styles.cardHeader}>
+          <View style={styles.cardIconWrap}>
+            <Text style={{ fontSize: 20 }}>{cancelled ? '🚫' : '🏫'}</Text>
           </View>
-        </TouchableOpacity>
-      </View>
-    </Card>
-  );
+          <View style={styles.cardInfo}>
+            <Text style={styles.schoolName}>{item.schoolName || 'Receipt'}</Text>
+            <Text style={styles.dateText}>🕐 {formatDate(item.savedAt)}</Text>
+          </View>
+          <View style={styles.spellBadge}>
+            <Text style={styles.spellBadgeText}>Spell {item.spell || 1}</Text>
+          </View>
+        </View>
+
+        {/* Meta */}
+        <View style={styles.cardMeta}>
+          {item.invoiceNo ? (
+            <View style={styles.metaChip}>
+              <Text style={styles.metaChipText}>🧾 {item.invoiceNo}</Text>
+            </View>
+          ) : null}
+          <View style={styles.metaChip}>
+            <Text style={styles.metaChipText}>📦 {item.itemCount} items</Text>
+          </View>
+          <View style={styles.metaChip}>
+            <Text style={styles.metaChipText}>🔢 {item.totalQty} qty</Text>
+          </View>
+          {item.channel && item.channel !== 'thermal' ? (
+            <View style={styles.metaChip}>
+              <Text style={styles.metaChipText}>{item.channel === 'pdf' ? '📄 PDF' : '🖨️ System'}</Text>
+            </View>
+          ) : null}
+          {item.legacy ? (
+            <View style={[styles.metaChip, styles.chipLegacy]}>
+              <Text style={styles.metaChipText}>🧪 పాత (లెక్కలో లేదు)</Text>
+            </View>
+          ) : null}
+          {cancelled ? (
+            <View style={[styles.metaChip, styles.chipCancelled]}>
+              <Text style={[styles.metaChipText, { color: Colors.danger }]}>CANCELLED</Text>
+            </View>
+          ) : null}
+        </View>
+
+        {/* Actions */}
+        {!cancelled && (
+          <View style={styles.cardActions}>
+            <TouchableOpacity
+              style={styles.reprintBtn}
+              onPress={() => handleReprint(item)}
+              disabled={printing !== null}
+            >
+              {printing === item.id
+                ? <ActivityIndicator color={Colors.primary} size="small" />
+                : (
+                  <View style={styles.actionBtnInner}>
+                    <Text style={styles.reprintIcon}>🖨️</Text>
+                    <Text style={styles.reprintText}>Reprint</Text>
+                  </View>
+                )}
+            </TouchableOpacity>
+            {item.legacy ? (
+              <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item.id)}>
+                <View style={styles.actionBtnInner}>
+                  <Text style={styles.deleteIcon}>🗑️</Text>
+                  <Text style={styles.deleteText}>Delete</Text>
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.deleteBtn} onPress={() => handleCancel(item)}>
+                <View style={styles.actionBtnInner}>
+                  <Text style={styles.deleteIcon}>🚫</Text>
+                  <Text style={styles.deleteText}>Cancel</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </Card>
+    );
+  };
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safe}>
-        <ScreenHeader title="History" subtitle="Printed receipts" />
+      <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
+        <Hero title="History" subtitle="Printed receipts" />
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={Colors.primary} />
         </View>
@@ -162,10 +196,9 @@ export default function HistoryScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
 
-      {/* ── ui.js → ScreenHeader ── */}
-      <ScreenHeader title="History" subtitle="Printed receipts" />
+      <Hero title="History" subtitle="Printed receipts" info={`${history.length} receipts`} />
 
       <View style={styles.container}>
 
@@ -174,23 +207,50 @@ export default function HistoryScreen() {
           <View style={styles.countChip}>
             <Text style={styles.countChipText}>📋 {history.length} records</Text>
           </View>
-          {history.length > 0 && (
-            <TouchableOpacity style={styles.clearBtn} onPress={handleClearAll}>
-              <Text style={styles.clearBtnIcon}>🗑️</Text>
-              <Text style={styles.clearBtnText}>Clear All</Text>
-            </TouchableOpacity>
-          )}
         </View>
 
-        {history.length === 0 ? (
+        {history.length > 0 && (
+          <View style={styles.searchBox}>
+            <Text style={styles.searchIcon}>🔍</Text>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Invoice no. లేదా school పేరు..."
+              value={search}
+              onChangeText={setSearch}
+              placeholderTextColor={Colors.textMuted}
+            />
+            {search.length > 0 && (
+              <TouchableOpacity onPress={() => setSearch('')}>
+                <Text style={{ fontSize: 16, color: Colors.textMuted }}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {loadError ? (
+          <View style={styles.centered}>
+            <Text style={styles.emptyEmoji}>⚠️</Text>
+            <Text style={styles.emptyTitle}>History చదవలేకపోయాను</Text>
+            <Text style={styles.emptyHint}>{loadError}</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={loadHistory}>
+              <Text style={styles.retryBtnText}>మళ్ళీ ప్రయత్నించు</Text>
+            </TouchableOpacity>
+          </View>
+        ) : history.length === 0 ? (
           <View style={styles.centered}>
             <Text style={styles.emptyEmoji}>📋</Text>
             <Text style={styles.emptyTitle}>No history yet</Text>
             <Text style={styles.emptyHint}>Print చేసిన తర్వాత ఇక్కడ కనిపిస్తుంది</Text>
           </View>
+        ) : visible.length === 0 ? (
+          <View style={styles.centered}>
+            <Text style={styles.emptyEmoji}>🔍</Text>
+            <Text style={styles.emptyTitle}>ఏమీ దొరకలేదు</Text>
+            <Text style={styles.emptyHint}>వేరే పదంతో వెతకండి</Text>
+          </View>
         ) : (
           <FlatList
-            data={history}
+            data={visible}
             keyExtractor={item => item.id}
             renderItem={renderItem}
             contentContainerStyle={styles.list}
@@ -234,6 +294,20 @@ const styles = StyleSheet.create({
 
   list: { paddingBottom: Spacing.xl },
 
+  searchBox: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.surface, borderRadius: Radius.lg,
+    paddingHorizontal: Spacing.md, marginBottom: Spacing.sm,
+    borderWidth: 0.5, borderColor: Colors.cardBorder, gap: Spacing.sm,
+  },
+  searchIcon:  { fontSize: 16 },
+  searchInput: { flex: 1, paddingVertical: Spacing.md, fontSize: 14, color: Colors.textPrimary },
+  historyCardCancelled: { opacity: 0.6 },
+  chipLegacy:    { backgroundColor: '#fef9c3' },
+  chipCancelled: { backgroundColor: Colors.dangerBg },
+  retryBtn:     { marginTop: Spacing.md, backgroundColor: Colors.primaryLight, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, borderRadius: Radius.md },
+  retryBtnText: { color: Colors.primary, fontWeight: '700' },
+
   // Card
   historyCard:  { marginBottom: Spacing.sm, gap: Spacing.sm },
   cardHeader:   { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
@@ -244,7 +318,7 @@ const styles = StyleSheet.create({
   spellBadge:   { backgroundColor: Colors.primaryLight, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: Radius.md },
   spellBadgeText: { fontSize: 11, color: Colors.primary, fontWeight: '700' },
 
-  cardMeta: { flexDirection: 'row', gap: Spacing.sm },
+  cardMeta: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap' },
   metaChip: { backgroundColor: Colors.background, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: Radius.sm },
   metaChipText: { fontSize: 11, color: Colors.textSecondary, fontWeight: '500' },
 

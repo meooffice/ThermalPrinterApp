@@ -20,7 +20,7 @@ export default class EscPosEncoder {
   }
 
   initialize() {
-    return this._push(ESC, 0x40); // Reset printer
+    return this._push(ESC, 0x40);
   }
 
   align(value) {
@@ -59,7 +59,6 @@ export default class EscPosEncoder {
     return this.text(char.repeat(width)).newline();
   }
 
-  // Two column row e.g. "Item name        $10.00"
   row(left, right, width = 32) {
     const space = width - left.length - right.length;
     const line  = left + ' '.repeat(Math.max(space, 1)) + right;
@@ -74,11 +73,59 @@ export default class EscPosEncoder {
     return this._push(ESC, 0x42, times, duration);
   }
 
+  /**
+   * Print a raster bitmap using ESC/POS "GS v 0" command.
+   *
+   * @param {Uint8ClampedArray|Buffer} rgbaData  Flat RGBA array (4 bytes per pixel).
+   *                                             This is exactly what jimp gives via bitmap.data.
+   * @param {number} imgW   Image width in pixels.
+   * @param {number} imgH   Image height in pixels.
+   * @param {number} [threshold=128]  Luminance cutoff — pixels darker than this print black.
+   *
+   * Command format:  GS 0x76 0x30  m  xL xH  yL yH  [data]
+   *   m    = 0x00  normal density
+   *   xL/H = bytes per row = ceil(width / 8)
+   *   yL/H = number of rows = height
+   *   data = raster bytes, MSB = leftmost pixel, 1 = black
+   */
+  imageBitmap(rgbaData, imgW, imgH, threshold = 128) {
+    const bytesPerRow = Math.ceil(imgW / 8);
+    const raster      = [];
+
+    for (let y = 0; y < imgH; y++) {
+      for (let bx = 0; bx < bytesPerRow; bx++) {
+        let byte = 0;
+        for (let bit = 0; bit < 8; bit++) {
+          const x = bx * 8 + bit;
+          if (x < imgW) {
+            const i   = (y * imgW + x) * 4;
+            const r   = rgbaData[i];
+            const g   = rgbaData[i + 1];
+            const b   = rgbaData[i + 2];
+            const a   = rgbaData[i + 3];
+            // Transparent pixels → white (don't print)
+            const lum = a < 128 ? 255 : 0.299 * r + 0.587 * g + 0.114 * b;
+            if (lum < threshold) byte |= (0x80 >> bit);
+          }
+        }
+        raster.push(byte);
+      }
+    }
+
+    const xL = bytesPerRow & 0xff;
+    const xH = (bytesPerRow >> 8) & 0xff;
+    const yL = imgH & 0xff;
+    const yH = (imgH >> 8) & 0xff;
+
+    this._push(GS, 0x76, 0x30, 0x00, xL, xH, yL, yH);
+    this._buffer.push(...raster);
+    return this;
+  }
+
   encode() {
     return new Uint8Array(this._buffer);
   }
 
-  // Returns base64 string — used to send over Bluetooth
   encodeBase64() {
     const bytes = this.encode();
     let binary  = '';

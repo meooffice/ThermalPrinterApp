@@ -2,32 +2,41 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, ActivityIndicator,
-  Alert, StyleSheet, PermissionsAndroid, Platform, SafeAreaView, ScrollView,
+  Alert, StyleSheet, PermissionsAndroid, Platform,  ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import BluetoothService from '../services/BluetoothService';
+import { isPrinterDevice } from '../services/PrinterFilter';
 import { Colors, Radius, Spacing, Typography } from '../constants/Theme'; 
 import { ScreenHeader, Card, ConnectedChip } from '../components/ui';
+import { NativeModules, TurboModuleRegistry } from 'react-native';
 
 export default function ScanScreen({ navigation }) {
   const [pairedDevices, setPairedDevices] = useState([]);
   const [nearbyDevices, setNearbyDevices] = useState([]);
   const [scanning, setScanning]           = useState(false);
   const [connecting, setConnecting]       = useState(null);
+  const [showAll, setShowAll]             = useState(false);   // false = printers only
 
   useEffect(() => {
+    
     initBluetooth();
     return () => { BluetoothService.cancelDiscovery().catch(() => {}); };
   }, []);
 
   const requestPermissions = async () => {
-    if (Platform.OS !== 'android') return true;
-    const grants = await PermissionsAndroid.requestMultiple([
-      PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-      PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-    ]);
-    return Object.values(grants).every(v => v === PermissionsAndroid.RESULTS.GRANTED);
-  };
+  if (Platform.OS !== 'android') return true;
+  // BLUETOOTH_CONNECT / BLUETOOTH_SCAN Android 12 (API 31) నుండి మాత్రమే ఉన్నాయి
+  const perms = Platform.Version >= 31
+    ? [
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      ]
+    : [PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION];
+  const grants = await PermissionsAndroid.requestMultiple(perms);
+  return Object.values(grants).every(v => v === PermissionsAndroid.RESULTS.GRANTED);
+};
 
   const initBluetooth = async () => {
     try {
@@ -61,6 +70,12 @@ export default function ScanScreen({ navigation }) {
     finally { setConnecting(null); }
   };
 
+  // Printers only by default (display filter; connection logic is unchanged)
+  const visiblePaired = showAll ? pairedDevices : pairedDevices.filter(isPrinterDevice);
+  const visibleNearby = showAll ? nearbyDevices : nearbyDevices.filter(isPrinterDevice);
+  const hiddenCount   = (pairedDevices.length - pairedDevices.filter(isPrinterDevice).length)
+                      + (nearbyDevices.length - nearbyDevices.filter(isPrinterDevice).length);
+
   const renderDevice = ({ item }) => (
     <TouchableOpacity
       style={styles.deviceCard}
@@ -74,6 +89,11 @@ export default function ScanScreen({ navigation }) {
       <View style={styles.deviceInfo}>
         <Text style={styles.deviceName}>{item.name || 'Unknown Device'}</Text>
         <Text style={styles.deviceAddress}>📶 {item.address}</Text>
+        {showAll && item.deviceClass ? (
+          <Text style={styles.deviceAddress}>
+            {isPrinterDevice(item) ? '🖨️ printer' : '📱 ఇతర'} · class {item.deviceClass.majorClass}/{item.deviceClass.deviceClass}
+          </Text>
+        ) : null}
       </View>
       {connecting === item.address ? (
         <ActivityIndicator color={Colors.primary} />
@@ -104,7 +124,7 @@ export default function ScanScreen({ navigation }) {
 
         {/* ── Paired Devices ── */}
         <Text style={styles.sectionTitle}>🔗  Paired Devices</Text>
-        {pairedDevices.length === 0 ? (
+        {visiblePaired.length === 0 ? (
           // ui.js → Card
           <Card style={styles.emptyCard}>
             <Text style={styles.emptyIcon}>📵</Text>
@@ -113,11 +133,20 @@ export default function ScanScreen({ navigation }) {
           </Card>
         ) : (
           <FlatList
-            data={pairedDevices}
+            data={visiblePaired}
             keyExtractor={item => item.address}
             renderItem={renderDevice}
             scrollEnabled={false}
           />
+        )}
+
+        {/* ── Printers only / all devices toggle ── */}
+        {(hiddenCount > 0 || showAll) && (
+          <TouchableOpacity style={styles.filterToggle} onPress={() => setShowAll(v => !v)}>
+            <Text style={styles.filterToggleText}>
+              {showAll ? '🖨️  Printers మాత్రమే చూపించు' : `📱  ఇతర devices (${hiddenCount}) కూడా చూపించు`}
+            </Text>
+          </TouchableOpacity>
         )}
 
         {/* ── Scan Button ── */}
@@ -141,11 +170,11 @@ export default function ScanScreen({ navigation }) {
         </TouchableOpacity>
 
         {/* ── Nearby Devices ── */}
-        {nearbyDevices.length > 0 && (
+        {visibleNearby.length > 0 && (
           <>
             <Text style={styles.sectionTitle}>📡  Nearby Devices</Text>
             <FlatList
-              data={nearbyDevices}
+              data={visibleNearby}
               keyExtractor={item => item.address}
               renderItem={renderDevice}
               scrollEnabled={false}
@@ -201,6 +230,8 @@ const styles = StyleSheet.create({
   deviceInfo:    { flex: 1 },
   deviceName:    { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
   deviceAddress: { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
+  filterToggle:     { alignSelf: 'flex-start' },
+  filterToggleText: { fontSize: 12, color: Colors.primary, fontWeight: '700' },
   connectBadge:  { backgroundColor: Colors.primaryLight, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: Radius.full },
   connectBadgeText: { color: Colors.primary, fontWeight: '700', fontSize: 12 },
 

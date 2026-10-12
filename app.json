@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "T-Print",
+    "name": "SRKVM",
     "slug": "thermalprinterapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "tprint",
-    
+
     "userInterfaceStyle": "light",
     "splash": {
       "resizeMode": "contain",
@@ -25,61 +25,8 @@
         "android.permission.BLUETOOTH_SCAN",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.CAMERA",
-        "android.permission.VIBRATE",
-        "android.permission.POST_NOTIFICATIONS",
-        "android.permission.RECORD_AUDIO"
-      ],
-      "intentFilters": [
-        {
-          "action": "android.intent.action.VIEW",
-          "autoVerify": true,
-          "data": [
-            {
-              "scheme": "tprint",
-              "host": "print"
-            }
-          ],
-          "category": [
-            "android.intent.category.DEFAULT",
-            "android.intent.category.BROWSABLE"
-          ]
-        },
-        {
-          "action": "android.intent.action.SEND",
-          "category": [
-            "android.intent.category.DEFAULT"
-          ],
-          "data": [
-            {
-              "mimeType": "application/pdf"
-            }
-          ]
-        },
-        {
-          "action": "android.intent.action.SEND",
-          "category": [
-            "android.intent.category.DEFAULT"
-          ],
-          "data": [
-            {
-              "mimeType": "image/*"
-            }
-          ]
-        },
-        {
-          "action": "android.intent.action.SEND",
-          "category": [
-            "android.intent.category.DEFAULT"
-          ],
-          "data": [
-            {
-              "mimeType": "text/plain"
-            }
-          ]
-        }
+        "android.permission.VIBRATE"
       ]
     },
     "plugins": [
@@ -93,14 +40,8 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Thermal Printer to use camera for barcode scanning."
-        }
-      ],
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/icon.png",
-          "color": "#4f46e5"
+          "cameraPermission": "Allow Thermal Printer to use camera for barcode scanning.",
+          "recordAudioAndroid": false
         }
       ],
       "expo-asset"

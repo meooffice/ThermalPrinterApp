@@ -1,197 +1,114 @@
-# 🖨️ T-Print — Thermal Printer App
+# T-Print (SRKVM Kit Distribution)
 
-**SRKVM Kit Distribution & Thermal Receipt Printing App**  
-Built with React Native (Expo Bare) · Android
+Offline Android app (Expo SDK 54, React Native 0.81.5, JavaScript) for kit distribution at mandal level:
+schools, item catalog, stock, receipts, reports, and 58 mm thermal printing (Bluetooth Classic, ESC/POS).
+App name shown on the phone: **SRKVM**. Android package: `com.thermalprinterapp` (do not change it: the Google
+sign-in client and installed data are tied to it).
 
----
+## Build / run
+- Development build only (not Expo Go): `npx expo run:android`
+- `android/gradle.properties` must keep `newArchEnabled=false`.
+  `react-native-bluetooth-classic` does not work on the New Architecture (NativeModule is null).
+  Do not set it back to `true`, and do not upgrade Expo SDK / packages without testing Bluetooth.
+- Metro only (JS changes): `npx expo start --dev-client`
+- The `android/` folder is committed, so changes in `app.json` do NOT reach the native project by themselves.
+  Native changes (app name, icons, permissions, new native packages) are made in `android/` and need a rebuild.
+  After adding a native package: `npx expo install <package>`, then `cd android; .\gradlew clean; cd ..; npx expo run:android`.
+- Release APK (EAS): `eas build --platform android --profile production` (profile `production` = internal APK;
+  `eas.json` uses `cli.appVersionSource: "local"`, so raise `versionCode` in `android/app/build.gradle` for each release).
+  Keep the keystore backed up. Check `git check-ignore android` first (the folder must be committed or EAS will not see it).
 
-## 📱 Screenshots
+## Main features
+| Area | Where | Notes |
+|---|---|---|
+| Receipt | Receipt tab | School -> Roll popup (Proceed / Update) -> items auto-filled (Required - Given, only if stock available) -> Thermal / PDF / System print. Negative count (e.g. `-3`) = Return. **Preview** button shows the receipt text before printing. |
+| Size-wise items | Receipt tab | Items that have sizes (e.g. Shoes 15-32) open a size popup: how many of each size. Total stays in `count`, per-size counts are saved in `sizes`. Per-size stock is checked when stock entries have sizes. Printed / PDF lines show `Size: 20x3, 21x1`. |
+| History | History tab | Receipts are a ledger (no cap). Cancel (new receipts) / Delete (legacy only). Reprint prints the same layout with "DUPLICATE COPY". |
+| Schools | Settings -> Schools | Type label, Min-Max classes, Boys/Girls roll per class. Excel upload (template or UDISE+, see below) with preview. |
+| Items | Settings -> Item Catalog | Code, Type (dynamic), SubType (Common/Boys/Girls), class range, semester, sizes, per-student norms. Excel upload with template + preview. |
+| Stock & Balance | Home | Received (manual entries) - Given (from receipts) = Balance. Size-wise table for sized items. Printing is blocked when stock is short. |
+| Requirement & Deficit | Home | Required (roll x norms) vs Received, including per-size shortages. |
+| Reports | Home | Stock, Requirement, School-wise, Receipts list, **Selected School Report** (pick one school): A4 PDF / Excel. Sized items show size sub-rows. |
+| Academic Year Close | Home | Backup (required) -> roll promotion preview -> type CLOSE. Clears the year's receipts + stock, promotes rolls, new invoice series. |
+| Backup / Restore | Settings | JSON file with all app data (manual), plus Google Drive auto backup (below). |
 
-| Home | Kit Distribution | Schools | Catalog |
-|------|-----------------|---------|---------|
-| Printer status & quick actions | School picker, spell, items checklist | Manage school list | Manage kit items |
+## Printer
+- Home shows the printer card (Connect / Disconnect). The last connected printer is saved in `last_printer`.
+- `BluetoothService.ensureConnected()` = already connected, or one silent reconnect to the last printer (8 s, no permission
+  prompt). Print and reprint call it first. A failed print is never re-sent automatically (avoids double prints).
+- Home tries one automatic reconnect when the app starts. Disconnect forgets the saved printer.
+- `ReceiptPrinter.buildReceiptBase64` is the only ESC/POS builder (print + reprint). `buildReceiptPreview` is a text mirror
+  of it: change both together.
 
----
+## UDISE+ roll upload (Schools -> Upload)
+Upload the UDISE+ "Enrolment Details" Excel directly (the app detects it: title rows, then `UDISE Code`, `School Name`,
+`Class N(Boys)` / `Class N(Girls)` / `Class N(Trans)` columns). A preview is shown first; nothing is saved until Confirm.
+- Matching is by UDISE code only. Found = **Update**, not found = **New school** (added).
+- Update changes only the roll of classes inside the school's Min-Max range. Name, address, type and items are kept.
+  If the school has no class range yet, range (and type if empty) is taken from the classes that have students.
+- Students in classes outside the school's range are reported (warning) and not added.
+- Trans students are added to Boys. PP classes are ignored.
+- New school: type is a guess from the class range (PS / UPS / HS / HS+). It is only a label and can be edited.
+- Preview shows `Roll old -> new (+/-n)`; reductions are red. Schools whose roll already matches are only counted.
+  A warning is shown if the file's academic year differs from the app's. On Confirm, if items already given exceed the
+  new roll's requirement, the same "Roll reduced" warning as the Edit School screen is shown.
+- Schools missing from the file are left untouched.
 
-## ✨ Features / విశేషాలు
+## Google Drive auto backup (Settings -> Backup & Restore)
+- Switch on: Google account is chosen once (silent sign-in later). The backup is ONE file `tprint-backup-latest.json`
+  in the app's hidden Drive folder (`appDataFolder`, scope `drive.appdata`); every backup overwrites it.
+- When: after 7 PM each day. The app checks on start, on returning to foreground and every 5 minutes while open;
+  a backup runs if no backup was made since the last 7 PM. After a failure it retries after 30 minutes.
+  It cannot upload while the app is closed.
+- A daily 7 PM local notification reminds the user to open the app (`services/BackupReminder.js`, needs notification
+  permission; a tap just opens the app, the backup is made by the check above).
+- Switch-on asks Restore / Replace when Drive already holds a backup (protects a new phone). "Drive Restore" restores
+  with the same checks as file restore. Empty data is never uploaded.
+- Setup (Google Cloud, one project): enable Drive API; OAuth consent screen with scope `drive.appdata` and all users'
+  Gmail addresses under Test users (or publish the app); an **Android** client per signing key (package
+  `com.thermalprinterapp` + SHA-1 of the debug keystore, and of the EAS release keystore from `eas credentials`);
+  one **Web application** client whose ID goes into `WEB_CLIENT_ID` in `services/DriveBackupService.js`
+  (it must be the Web client, not the Android client: otherwise sign-in fails with `DEVELOPER_ERROR`).
+- In Testing mode Google may ask for sign-in again after about 7 days: switch off and on in Settings.
 
-- 🖨️ Bluetooth Thermal Printer support (Everycom EC-58 58mm)
-- 🏫 SRKVM Kit Distribution receipts
-- 📦 Item Catalog management
-- 🏫 School management with UDISE codes
-- 📋 Receipt History with reprint
-- 📄 Share as PDF / System Print
-- ⚙️ Mandal/Shop settings with logo
-- 🔢 Multiple copies printing
-- 📷 Barcode scanner for items
+## Academic year and invoice numbers
+- Academic year = April-March, written `2026-27` (editable in Settings; saved once, never changes silently).
+- Invoice: `2026-27/0001`. The number is used up only after something was really printed / produced, in one atomic write with the receipt.
 
----
+## Code layout
+- `screens/` UI only. `services/` storage and business logic. `components/`, `constants/` shared UI and theme.
+- `services/*Model.js` are pure helpers (validation and maths), no storage.
+- `services/ReceiptPrinter.js` builds the ESC/POS receipt bytes (new print and reprint share it).
+- `services/MigrationService.js` runs once per install/restore (idempotent, flag based).
+- `components/Hero.js`: the rounded fixed header used by all screens. A screen that uses it sets its outer
+  `SafeAreaView` to `edges={['left','right','bottom']}` and places the Hero outside the ScrollView / FlatList.
+- `components/WelcomeSplash.js`: welcome overlay at app start (shows `assets/srkvm.png`, tap to skip).
+- `components/FloatingTabBar.js` and bottom sheets add the bottom safe-area inset so buttons stay above the Android
+  navigation bar.
 
-## 🇬🇧 HOW TO USE (English)
+## UI notes (things that broke before)
+- Add / Edit sheets use a plain `View`, not `KeyboardAvoidingView` (it made the sheet shake on Android).
+  The Item Types sheet in Catalog still uses `KeyboardAvoidingView`.
+- Never write `{/* comment */}` on the same line right after an opening tag: it becomes a text node and causes
+  "Text strings must be rendered within a <Text> component".
+- Do not define components inside another component (inputs lose focus on every keystroke).
+- Long lists in sheets (e.g. upload preview) use `FlatList`; rendering many rows at once made the sheet stall.
 
-### Step 1 — Settings Setup
-1. Open the app → tap **⚙️ Settings** tab
-2. Enter your **Mandal Name** in the "Shop Name" field
-3. Enter phone number and address
-4. Optionally add a shop/department logo
-5. Tap **💾 Save Settings**
+## Icons and name
+- Launcher icons: `android/app/src/main/res/mipmap-*` (`ic_launcher`, `ic_launcher_round`, `ic_launcher_foreground`,
+  `ic_launcher_background`) and `mipmap-anydpi-v26/*.xml`. Notification icon: `drawable-*/notification_icon.png`.
+  `assets/icon*.png` are the 1024 px sources. App name: `app_name` in `res/values/strings.xml` (and `name` in `app.json`).
 
-### Step 2 — Add Kit Items to Catalog
-1. Tap **📦 Catalog** tab
-2. Tap **+ Add** button
-3. Enter item name (e.g. Note Books, Pencils, Geometry Box)
-4. Enter category (e.g. Stationery)
-5. Optionally scan barcode
-6. Tap **Add Item**
-7. Repeat for all kit items
+## AsyncStorage keys
+`shop_settings`, `schools_list`, `item_catalog`, `item_types`, `receipt_index`, `receipt:<id>`, `stock_entries`,
+`invoice_serial_<academicYear>`, `receipt_history` (old format, kept untouched), `migration_2b_done`, `migration_3a_done`.
+Backup includes all of these.
+Not in Backup (device-specific): `last_printer` (`{name, address}`), `drive_backup_meta` (Drive auto backup switch,
+account, last backup time / error).
 
-### Step 3 — Add Schools
-1. Tap **🏫 Schools** tab
-2. Tap **+ Add** button
-3. Enter school name, UDISE code, address
-4. Tap **Add School**
-5. Repeat for all schools
-
-### Step 4 — Connect Printer
-1. On your phone go to **Settings → Bluetooth**
-2. Turn on your Everycom EC-58 printer
-3. Pair the printer (look for "EC58" or "BT Printer")
-4. Open T-Print app → tap **🔍 Connect** tab
-5. Tap your printer name under "Paired Devices"
-6. Wait for "Connected!" message
-7. Home screen shows green status ✅
-
-### Step 5 — Print Kit Distribution Receipt
-1. Tap **🧾 Receipt** tab
-2. Tap school selector → choose the school
-3. Adjust **Spell Number** using + / − buttons
-4. Tick ☑️ the items being distributed
-5. Enter count for each ticked item
-6. Tap **🖨️ Thermal Printer లో Print**
-7. Enter number of copies needed
-8. Tap **Print** — receipt prints! 🎉
-
-### Step 6 — Test Print
-1. Connect printer (Step 4)
-2. Go to **🏠 Home** tab
-3. Tap **🧪 Test Print**
-4. Printer prints a test page
-
-### Step 7 — Share as PDF
-1. Fill receipt details (Step 5)
-2. Tap **📄 PDF Share**
-3. Choose app to share (WhatsApp, Gmail, Drive etc.)
-
-### Step 8 — View History & Reprint
-1. Tap **📋 History** tab
-2. See all past receipts
-3. Tap **🖨️ Reprint** to reprint any receipt
-4. Tap **🗑️ Delete** to remove from history
-
----
-
-## 🇮🇳 ఎలా వాడాలి (తెలుగు)
-
-### అడుగు 1 — Settings చేయండి
-1. App open చేయండి → **⚙️ Settings** tab tap చేయండి
-2. "Shop Name" లో మీ **మండల పేరు** enter చేయండి
-3. Phone number మరియు address enter చేయండి
-4. లోగో add చేయాలంటే tap చేయండి
-5. **💾 Save Settings** tap చేయండి
-
-### అడుగు 2 — Catalog లో Items Add చేయండి
-1. **📦 Catalog** tab tap చేయండి
-2. **+ Add** button tap చేయండి
-3. Item పేరు enter చేయండి (ఉదా: Note Books, Pencils)
-4. Category enter చేయండి (ఉదా: Stationery)
-5. **Add Item** tap చేయండి
-6. అన్ని kit items కోసం పునరావృతం చేయండి
-
-### అడుగు 3 — Schools Add చేయండి
-1. **🏫 Schools** tab tap చేయండి
-2. **+ Add** button tap చేయండి
-3. School పేరు, UDISE code, address enter చేయండి
-4. **Add School** tap చేయండి
-5. అన్ని schools కోసం పునరావృతం చేయండి
-
-### అడుగు 4 — Printer Connect చేయండి
-1. Phone లో **Settings → Bluetooth** కి వెళ్ళండి
-2. Everycom EC-58 printer on చేయండి
-3. "EC58" లేదా "BT Printer" పేరుతో pair చేయండి
-4. T-Print app లో **🔍 Connect** tab tap చేయండి
-5. Paired Devices లో printer పేరు tap చేయండి
-6. "Connected!" message వస్తుంది
-7. Home screen లో green status కనిపిస్తుంది ✅
-
-### అడుగు 5 — Kit Distribution Receipt Print చేయండి
-1. **🧾 Receipt** tab tap చేయండి
-2. School selector tap చేసి → school ఎంచుకోండి
-3. **Spell Number** + / − తో మార్చండి
-4. పంచే items ☑️ tick చేయండి
-5. ప్రతి item కి count enter చేయండి
-6. **🖨️ Thermal Printer లో Print** tap చేయండి
-7. కావలసిన copies సంఖ్య enter చేయండి
-8. **Print** tap చేయండి — receipt print అవుతుంది! 🎉
-
-### అడుగు 6 — Test Print
-1. Printer connect చేయండి (అడుగు 4)
-2. **🏠 Home** tab కి వెళ్ళండి
-3. **🧪 Test Print** tap చేయండి
-4. Test page print అవుతుంది
-
-### అడుగు 7 — PDF గా Share చేయండి
-1. Receipt details fill చేయండి (అడుగు 5)
-2. **📄 PDF Share** tap చేయండి
-3. WhatsApp, Gmail, Drive లో share చేయండి
-
-### అడుగు 8 — History చూడండి & Reprint చేయండి
-1. **📋 History** tab tap చేయండి
-2. అన్ని past receipts కనిపిస్తాయి
-3. **🖨️ Reprint** tap చేస్తే మళ్ళీ print అవుతుంది
-4. **🗑️ Delete** tap చేస్తే history నుండి తొలగిపోతుంది
-
----
-
-## 🔧 Troubleshooting / సమస్యలు
-
-| సమస్య | పరిష్కారం |
-|-------|-----------|
-| Printer connect కావడం లేదు | Printer off/on చేయండి, Bluetooth re-pair చేయండి |
-| Print garbled అవుతోంది | Settings లో Paper Width 32 (58mm) గా set చేయండి |
-| App crash అవుతోంది | App uninstall చేసి మళ్ళీ install చేయండి |
-| Catalog items కనిపించడం లేదు | School select చేసిన తర్వాత checklist వస్తుంది |
-
----
-
-## 🛠️ Technical Details
-
-| Item | Detail |
-|------|--------|
-| Platform | Android (React Native - Expo Bare) |
-| Printer | Everycom EC-58 (58mm Thermal) |
-| Connection | Bluetooth Classic (SPP) |
-| Min Android | Android 8.0 (API 26) |
-| Package | com.thermalprinterapp |
-
----
-
-## 📦 Dependencies
-
-- `react-native-bluetooth-classic` — Bluetooth printing
-- `expo-image-picker` — Logo selection
-- `expo-camera` — Barcode scanning
-- `expo-print` — PDF generation
-- `expo-sharing` — File sharing
-- `@react-native-async-storage/async-storage` — Local data storage
-- `@react-navigation/native` — Navigation
-
----
-
-## 👨‍💻 Developer
-
-Built for **SRKVM Kit Distribution System**  
-Andhra Pradesh, India 🇮🇳
-
----
-
-*T-Print v1.0.0 — 2026*
+## Known limitations
+- ESC/POS text is Latin-1: Telugu text cannot be printed on the thermal printer (PDF supports it if the device font does).
+- Reports cannot be printed on the thermal printer (PDF / Excel only).
+- The template Excel upload (Schools / Items) does not show the "roll reduced below given" warning; the UDISE+ upload and
+  the Schools edit screen do.
+- Drive backup and its reminder do not run while the app is closed (Android background limits); the user must open the app.
