@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -14,10 +15,11 @@ import { read, utils } from 'xlsx';
 import CatalogService from '../services/CatalogService';
 import ItemTypeService from '../services/ItemTypeService';
 import TemplateService from '../services/TemplateService';
-import { itemEmoji, buildItemData, SUBTYPES, SUBTYPE_LABEL, effectiveClasses, formatSizes, parseSizes, parseCsvRows, rowsToItems } from '../services/ItemModel';
+import { buildItemData, SUBTYPES, SUBTYPE_LABEL, effectiveClasses, formatSizes, parseSizes, parseCsvRows, rowsToItems } from '../services/ItemModel';
 import { Colors, Radius, Spacing, Typography } from '../constants/Theme';
 import { Card } from '../components/ui';
 import Hero from '../components/Hero';
+import { itemIconName } from '../components/itemIcon';
 
 const EMPTY_FORM = {
   name: '', category: 'Others', barcode: '',
@@ -26,6 +28,16 @@ const EMPTY_FORM = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Small icon + text row (display only)
+function IconText({ icon, size = 12, color = Colors.textMuted, style, children }) {
+  return (
+    <View style={styles.iconText}>
+      <MaterialCommunityIcons name={icon} size={size} color={color} />
+      <Text style={[style, { flexShrink: 1 }]}>{children}</Text>
+    </View>
+  );
+}
 
 export default function CatalogScreen({ navigation }) {
   const insets = useSafeAreaInsets(); // keep sheet buttons above the Android navigation bar
@@ -199,11 +211,11 @@ export default function CatalogScreen({ navigation }) {
       const skipped = previewRows.length - ok.length;
       await loadItems();
       Alert.alert(
-        'Upload Complete ✅',
+        'Upload Complete',
         `${added} కొత్త items add, ${updated} items update అయ్యాయి.${skipped ? `\n${skipped} rows లో తప్పులు ఉన్నాయి, అవి skip అయ్యాయి.` : ''}`,
       );
     } catch (err) {
-      Alert.alert('❌ Import Failed', err.message);
+      Alert.alert('Import Failed', err.message);
     } finally {
       setUploading(false);
     }
@@ -231,35 +243,35 @@ export default function CatalogScreen({ navigation }) {
     <Card style={styles.itemCard}>
       <View style={styles.cardLeft}>
         <View style={styles.itemIcon}>
-          <Text style={{ fontSize: 22 }}>{itemEmoji(item)}</Text>
+          <MaterialCommunityIcons name={itemIconName(item)} size={24} color={Colors.primary} />
         </View>
         <View style={styles.itemInfo}>
           <Text style={styles.itemName}>{item.name}</Text>
           <View style={styles.itemMeta}>
             <View style={styles.categoryBadge}>
-              <Text style={styles.categoryText}>🏷️ {item.category}</Text>
+              <IconText icon="tag-outline" color={Colors.textSecondary} style={styles.categoryText}>{item.category}</IconText>
             </View>
-            {item.code ? <Text style={styles.barcodeText}>🔖 {item.code}</Text> : null}
+            {item.code ? <IconText icon="bookmark-outline" style={styles.barcodeText}>{item.code}</IconText> : null}
             {item.subType && item.subType !== 'Common' ? (
               <View style={styles.categoryBadge}>
-                <Text style={styles.categoryText}>{item.subType === 'Boys' ? '👦 Boys' : '👧 Girls'}</Text>
+                <IconText icon={item.subType === 'Boys' ? 'human-male' : 'human-female'} color={Colors.textSecondary} style={styles.categoryText}>{item.subType === 'Boys' ? 'Boys' : 'Girls'}</IconText>
               </View>
             ) : null}
             {item.classFrom ? (
-              <Text style={styles.barcodeText}>🎓 {item.classFrom === item.classTo ? item.classFrom : `${item.classFrom}–${item.classTo}`}</Text>
+              <IconText icon="school-outline" style={styles.barcodeText}>{item.classFrom === item.classTo ? item.classFrom : `${item.classFrom}–${item.classTo}`}</IconText>
             ) : null}
             {item.semester ? <Text style={styles.barcodeText}>SEM{item.semester}</Text> : null}
-            {item.sizes && item.sizes.length > 0 ? <Text style={styles.barcodeText}>📏 {item.sizes.length} sizes</Text> : null}
-            {item.barcode ? <Text style={styles.barcodeText}>📷 {item.barcode}</Text> : null}
+            {item.sizes && item.sizes.length > 0 ? <IconText icon="ruler" style={styles.barcodeText}>{item.sizes.length} sizes</IconText> : null}
+            {item.barcode ? <IconText icon="barcode" style={styles.barcodeText}>{item.barcode}</IconText> : null}
           </View>
         </View>
       </View>
       <View style={styles.itemActions}>
         <TouchableOpacity style={styles.editBtn} onPress={() => openEdit(item)}>
-          <Text style={{ fontSize: 16 }}>✏️</Text>
+          <MaterialCommunityIcons name="pencil-outline" size={18} color={Colors.primary} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item.id)}>
-          <Text style={{ fontSize: 16 }}>🗑️</Text>
+          <MaterialCommunityIcons name="trash-can-outline" size={18} color={Colors.danger} />
         </TouchableOpacity>
       </View>
     </Card>
@@ -296,12 +308,17 @@ export default function CatalogScreen({ navigation }) {
             >
               {uploading
                 ? <ActivityIndicator size="small" color={Colors.primary} />
-                : <Text style={styles.uploadBtnText}>📂  Upload</Text>
+                : (
+                  <>
+                    <MaterialCommunityIcons name="folder-upload-outline" size={16} color={Colors.primary} />
+                    <Text style={styles.uploadBtnText}>Upload</Text>
+                  </>
+                )
               }
             </TouchableOpacity>
             {/* Add button */}
             <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
-              <Text style={styles.addBtnIcon}>＋</Text>
+              <MaterialCommunityIcons name="plus" size={16} color={Colors.primaryText} />
               <Text style={styles.addBtnText}>Add Item</Text>
             </TouchableOpacity>
           </View>
@@ -309,20 +326,26 @@ export default function CatalogScreen({ navigation }) {
 
         {/* Format hint */}
         <Text style={styles.uploadHint}>
-          📄 CSV / Excel upload · Columns: Code, Name, Type, SubType, ClassFrom, ClassTo, Semester, Sizes, Barcode, N1–N12
+          CSV / Excel upload · Columns: Code, Name, Type, SubType, ClassFrom, ClassTo, Semester, Sizes, Barcode, N1–N12
         </Text>
         <TouchableOpacity style={styles.typesLink} onPress={handleTemplate} disabled={templateBusy}>
           {templateBusy
             ? <ActivityIndicator size="small" color={Colors.primary} />
-            : <Text style={styles.typesLinkText}>📥  Excel Template Download</Text>}
+            : (
+              <>
+                <MaterialCommunityIcons name="file-download-outline" size={16} color={Colors.primary} />
+                <Text style={styles.typesLinkText}>Excel Template Download</Text>
+              </>
+            )}
         </TouchableOpacity>
         <TouchableOpacity style={styles.typesLink} onPress={() => setTypesModal(true)}>
-          <Text style={styles.typesLinkText}>🏷️  Item Types నిర్వహించు ({types.length})</Text>
+          <MaterialCommunityIcons name="tag-multiple-outline" size={16} color={Colors.primary} />
+          <Text style={styles.typesLinkText}>Item Types నిర్వహించు ({types.length})</Text>
         </TouchableOpacity>
 
         {/* Search */}
         <View style={styles.searchBox}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <MaterialCommunityIcons name="magnify" size={20} color={Colors.textMuted} />
           <TextInput
             style={styles.searchInput}
             placeholder="Search items or barcode..."
@@ -332,7 +355,7 @@ export default function CatalogScreen({ navigation }) {
           />
           {search.length > 0 && (
             <TouchableOpacity onPress={() => setSearch('')}>
-              <Text style={{ fontSize: 16, color: Colors.textMuted }}>✕</Text>
+              <MaterialCommunityIcons name="close-circle" size={18} color={Colors.textMuted} />
             </TouchableOpacity>
           )}
         </View>
@@ -340,9 +363,9 @@ export default function CatalogScreen({ navigation }) {
         {/* List */}
         {filtered.length === 0 ? (
           <View style={styles.centered}>
-            <Text style={styles.emptyEmoji}>📦</Text>
+            <MaterialCommunityIcons name="package-variant-closed" size={52} color={Colors.accent} style={styles.emptyIcon} />
             <Text style={styles.emptyTitle}>No items yet</Text>
-            <Text style={styles.emptyHint}>+ Add Item లేదా 📂 Upload తో add చేయండి</Text>
+            <Text style={styles.emptyHint}>+ Add Item లేదా Upload తో add చేయండి</Text>
           </View>
         ) : (
           <FlatList
@@ -370,9 +393,10 @@ export default function CatalogScreen({ navigation }) {
           />
           <View style={[styles.modalSheet, styles.modalSheetTall, { paddingBottom: Spacing.lg + insets.bottom }]}>
             <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>
-              {editItem ? '✏️  Edit Item' : '📦  Add Item'}
-            </Text>
+            <View style={styles.modalTitleRow}>
+              <MaterialCommunityIcons name={editItem ? 'pencil-outline' : 'package-variant-closed'} size={22} color={Colors.primaryDark} />
+              <Text style={styles.modalTitle}>{editItem ? 'Edit Item' : 'Add Item'}</Text>
+            </View>
 
             <ScrollView style={styles.sheetScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <Text style={styles.inputLabel}>Item Name *</Text>
@@ -392,8 +416,11 @@ export default function CatalogScreen({ navigation }) {
                 onPress={() => setCatDropdown(prev => !prev)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.dropdownValue}>🏷️  {form.category}</Text>
-                <Text style={styles.dropdownArrow}>{catDropdown ? '▲' : '▼'}</Text>
+                <View style={styles.dropdownLeft}>
+                  <MaterialCommunityIcons name="tag-outline" size={16} color={Colors.primary} />
+                  <Text style={styles.dropdownValue}>{form.category}</Text>
+                </View>
+                <MaterialCommunityIcons name={catDropdown ? 'chevron-up' : 'chevron-down'} size={20} color={Colors.primary} />
               </TouchableOpacity>
 
               {catDropdown && (
@@ -488,7 +515,7 @@ export default function CatalogScreen({ navigation }) {
               />
               {form.sizesText.trim() ? (
                 <Text style={[styles.sizesInfo, sizesPreview.error && { color: Colors.danger }]}>
-                  {sizesPreview.error ? sizesPreview.error : `📏 ${sizesPreview.list.length} sizes: ${sizesPreview.list.join(', ')}`}
+                  {sizesPreview.error ? sizesPreview.error : `${sizesPreview.list.length} sizes: ${sizesPreview.list.join(', ')}`}
                 </Text>
               ) : null}
 
@@ -535,7 +562,7 @@ export default function CatalogScreen({ navigation }) {
                   returnKeyType="done"
                 />
                 <TouchableOpacity style={styles.scanBtn} onPress={handleScan}>
-                  <Text style={{ fontSize: 22 }}>📷</Text>
+                  <MaterialCommunityIcons name="barcode-scan" size={24} color={Colors.primary} />
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -545,7 +572,7 @@ export default function CatalogScreen({ navigation }) {
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-                <Text style={styles.saveBtnText}>{editItem ? '✅  Update' : '➕  Add Item'}</Text>
+                <Text style={styles.saveBtnText}>{editItem ? 'Update' : 'Add Item'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -558,14 +585,17 @@ export default function CatalogScreen({ navigation }) {
           <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setTypesModal(false)} />
           <View style={[styles.modalSheet, { height: '70%' }, { paddingBottom: Spacing.lg + insets.bottom }]}>
             <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>🏷️  Item Types</Text>
+            <View style={styles.modalTitleRow}>
+              <MaterialCommunityIcons name="tag-multiple-outline" size={22} color={Colors.primaryDark} />
+              <Text style={styles.modalTitle}>Item Types</Text>
+            </View>
             <ScrollView keyboardShouldPersistTaps="handled" style={{ flex: 1, marginBottom: Spacing.sm }}>
               {types.map(t => (
                 <View key={t} style={styles.typeRow}>
                   <Text style={styles.typeName}>{t}</Text>
                   {t !== 'Others' && (
                     <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteType(t)}>
-                      <Text style={{ fontSize: 16 }}>🗑️</Text>
+                      <MaterialCommunityIcons name="trash-can-outline" size={18} color={Colors.danger} />
                     </TouchableOpacity>
                   )}
                 </View>
@@ -584,7 +614,7 @@ export default function CatalogScreen({ navigation }) {
               <TouchableOpacity style={styles.scanBtn} onPress={handleAddType} disabled={typeBusy}>
                 {typeBusy
                   ? <ActivityIndicator size="small" color={Colors.primary} />
-                  : <Text style={styles.addTypeBtnText}>＋ Add</Text>}
+                  : <Text style={styles.addTypeBtnText}>+ Add</Text>}
               </TouchableOpacity>
             </View>
             <TouchableOpacity style={[styles.cancelBtn, { marginTop: Spacing.md }]} onPress={() => setTypesModal(false)}>
@@ -598,7 +628,7 @@ export default function CatalogScreen({ navigation }) {
       <Modal visible={scanning} animationType="slide" onRequestClose={() => setScanning(false)}>
         <View style={styles.scannerContainer}>
           <View style={styles.scannerHeader}>
-            <Text style={styles.scannerTitle}>📷  Scan Barcode</Text>
+            <Text style={styles.scannerTitle}>Scan Barcode</Text>
             <Text style={styles.scannerHint}>Barcode camera కి చూపించండి</Text>
           </View>
           <CameraView
@@ -611,7 +641,8 @@ export default function CatalogScreen({ navigation }) {
             barcodeScannerSettings={{ barcodeTypes: ['ean13', 'ean8', 'upc_a', 'code39', 'code128', 'qr'] }}
           />
           <TouchableOpacity style={styles.cancelScanBtn} onPress={() => setScanning(false)}>
-            <Text style={styles.cancelScanText}>✕  Cancel</Text>
+            <MaterialCommunityIcons name="close" size={18} color="#fff" />
+            <Text style={styles.cancelScanText}>Cancel</Text>
           </TouchableOpacity>
         </View>
       </Modal>
@@ -631,15 +662,16 @@ export default function CatalogScreen({ navigation }) {
           />
           <View style={[styles.modalSheet, { height: '80%' }, { paddingBottom: Spacing.lg + insets.bottom }]}>
             <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>
-              📋  Preview — {previewRows?.length} rows
-            </Text>
+            <View style={styles.modalTitleRow}>
+              <MaterialCommunityIcons name="clipboard-list-outline" size={22} color={Colors.primaryDark} />
+              <Text style={styles.modalTitle}>Preview — {previewRows?.length} rows</Text>
+            </View>
             <Text style={styles.previewHint}>
               దిగువ items మీ catalog లో add / update అవుతాయి. ఎరుపు rows (తప్పులు) skip అవుతాయి.
             </Text>
 
             <Text style={styles.previewSummary}>
-              🆕 కొత్తవి {pvNew}  ·  🔄 Update {pvUpd}  ·  ❌ తప్పులు {pvErr}
+              కొత్తవి {pvNew}  ·  Update {pvUpd}  ·  తప్పులు {pvErr}
             </Text>
 
             <View style={[styles.modalActions, { marginTop: 0, marginBottom: Spacing.sm }]}>
@@ -651,7 +683,7 @@ export default function CatalogScreen({ navigation }) {
                 onPress={confirmUpload}
                 disabled={pvNew + pvUpd === 0}
               >
-                <Text style={styles.saveBtnText}>✅  Confirm Import</Text>
+                <Text style={styles.saveBtnText}>Confirm Import</Text>
               </TouchableOpacity>
             </View>
 
@@ -680,13 +712,13 @@ export default function CatalogScreen({ navigation }) {
                       </Text>
                     </View>
                     <Text style={styles.previewName}>{row.name || '(పేరు లేదు)'}</Text>
-                    {row.code ? <Text style={styles.previewMeta}>🔖 {row.code}</Text> : null}
+                    {row.code ? <IconText icon="bookmark-outline" style={styles.previewMeta}>{row.code}</IconText> : null}
                     {row.status !== 'error' ? (
-                      <Text style={styles.previewMeta}>
-                        🏷️ {row.category} · {row.data.subType}
-                        {row.data.classFrom ? ` · 🎓 ${row.data.classFrom}–${row.data.classTo}` : ''}
-                        {row.data.sizes && row.data.sizes.length ? ` · 📏 ${row.data.sizes.length} sizes` : ''}
-                      </Text>
+                      <IconText icon="tag-outline" style={styles.previewMeta}>
+                        {row.category} · {row.data.subType}
+                        {row.data.classFrom ? ` · తరగతులు ${row.data.classFrom}–${row.data.classTo}` : ''}
+                        {row.data.sizes && row.data.sizes.length ? ` · ${row.data.sizes.length} sizes` : ''}
+                      </IconText>
                     ) : (
                       <Text style={styles.previewError}>{row.error}</Text>
                     )}
@@ -714,15 +746,15 @@ const styles = StyleSheet.create({
   backBtnText:{ fontSize: 16, color: Colors.primary, fontWeight: '600' },
   topActions: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' },
 
-  uploadBtn:     { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: Colors.primary, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.lg },
+  uploadBtn:     { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1.5, borderColor: Colors.primary, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.lg },
   uploadBtnText: { color: Colors.primary, fontWeight: '700', fontSize: 13 },
 
   addBtn:     { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, backgroundColor: Colors.primary, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.lg },
-  addBtnIcon: { fontSize: 14, color: Colors.primaryText, fontWeight: '700' },
   addBtnText: { color: Colors.primaryText, fontWeight: '700', fontSize: 13 },
 
   uploadHint: { fontSize: 11, color: Colors.textMuted, marginBottom: Spacing.sm },
-  typesLink:     { alignSelf: 'flex-start', marginBottom: Spacing.sm },
+  iconText:      { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  typesLink:     { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.sm },
   subRow:        { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.sm },
   subPill:       { flex: 1, paddingVertical: Spacing.sm, paddingHorizontal: Spacing.xs, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.cardBorder, alignItems: 'center', backgroundColor: Colors.background },
   subPillActive: { backgroundColor: Colors.primaryLight, borderColor: Colors.primary },
@@ -752,7 +784,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md, marginBottom: Spacing.sm,
     borderWidth: 0.5, borderColor: Colors.cardBorder, gap: Spacing.sm,
   },
-  searchIcon:  { fontSize: 16 },
   searchInput: { flex: 1, paddingVertical: Spacing.md, fontSize: 14, color: Colors.textPrimary },
 
   itemCard:      { marginBottom: Spacing.sm, flexDirection: 'row', alignItems: 'center' },
@@ -768,7 +799,7 @@ const styles = StyleSheet.create({
   editBtn:       { backgroundColor: Colors.primaryLight, padding: Spacing.sm, borderRadius: Radius.sm },
   deleteBtn:     { backgroundColor: Colors.dangerBg, padding: Spacing.sm, borderRadius: Radius.sm },
 
-  emptyEmoji: { fontSize: 52, marginBottom: Spacing.md },
+  emptyIcon:  { marginBottom: Spacing.md },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary, marginBottom: Spacing.xs },
   emptyHint:  { ...Typography.bodySm, textAlign: 'center' },
 
@@ -785,7 +816,8 @@ const styles = StyleSheet.create({
     maxHeight: '85%',
   },
   modalHandle:   { width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.cardBorder, alignSelf: 'center', marginBottom: Spacing.md },
-  modalTitle:    { fontSize: 20, fontWeight: '800', color: Colors.primaryDark, marginBottom: Spacing.md },
+  modalTitleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.md },
+  modalTitle:    { fontSize: 20, fontWeight: '800', color: Colors.primaryDark },
   inputLabel:    { ...Typography.label, marginBottom: Spacing.xs, marginTop: Spacing.xs },
   input: {
     borderWidth: 1, borderColor: Colors.cardBorder, borderRadius: Radius.md,
@@ -799,8 +831,8 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.primary, borderRadius: Radius.md,
     padding: Spacing.sm, marginBottom: Spacing.xs, backgroundColor: Colors.primaryLight,
   },
+  dropdownLeft:             { flexDirection: 'row', alignItems: 'center', gap: 8 },
   dropdownValue:            { fontSize: 14, fontWeight: '600', color: Colors.primary },
-  dropdownArrow:            { fontSize: 12, color: Colors.primary },
   dropdownList: {
     borderWidth: 1, borderColor: Colors.cardBorder, borderRadius: Radius.md,
     backgroundColor: Colors.surface, marginBottom: Spacing.sm,
@@ -825,7 +857,7 @@ const styles = StyleSheet.create({
   scannerTitle:     { color: '#fff', fontSize: 20, fontWeight: '700', marginBottom: Spacing.xs },
   scannerHint:      { color: 'rgba(255,255,255,0.6)', fontSize: 13 },
   camera:           { flex: 1 },
-  cancelScanBtn:    { backgroundColor: Colors.danger, padding: Spacing.md, margin: Spacing.lg, borderRadius: Radius.lg, alignItems: 'center' },
+  cancelScanBtn:    { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, backgroundColor: Colors.danger, padding: Spacing.md, margin: Spacing.lg, borderRadius: Radius.lg, alignItems: 'center' },
   cancelScanText:   { color: '#fff', fontWeight: '700', fontSize: 16 },
 
   // Preview modal
@@ -838,5 +870,5 @@ const styles = StyleSheet.create({
   previewSummary: { fontSize: 12, fontWeight: '600', color: Colors.textSecondary, marginBottom: Spacing.sm },
   badge:        { paddingHorizontal: 6, paddingVertical: 1, borderRadius: Radius.sm, alignSelf: 'flex-start', marginBottom: 2 },
   badgeText:    { fontSize: 10, fontWeight: '700' },
-  saveBtnOff:   { backgroundColor: '#a5b4fc' },
+  saveBtnOff:   { backgroundColor: '#9DB89F' },
 });

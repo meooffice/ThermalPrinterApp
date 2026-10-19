@@ -1,8 +1,40 @@
 // services/CatalogService.js
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MigrationService from './MigrationService';
+import { rowsToItems } from './ItemModel';
+import { DEFAULT_ITEM_ROWS } from '../constants/DefaultItems';
 
 const CATALOG_KEY = 'item_catalog';
+
+// Same column order as the Items Excel template (constants/DefaultItems.js)
+const DEFAULT_HEADERS = ['Code', 'Name', 'Type', 'SubType', 'ClassFrom', 'ClassTo', 'Semester', 'Sizes', 'Barcode',
+  'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'N8', 'N9', 'N10', 'N11', 'N12'];
+
+// Default Item Catalog = DEFAULT_ITEM_ROWS, converted by the same rules as an Excel import.
+// Ids are fixed (def-<code>) so a later Excel import with the same Codes updates these items instead of duplicating them.
+function buildDefaultCatalog() {
+  const raw = DEFAULT_ITEM_ROWS.map(r => {
+    const o = {};
+    DEFAULT_HEADERS.forEach((h, i) => { o[h] = r[i] ?? ''; });
+    return o;
+  });
+  const types = [...new Set(DEFAULT_ITEM_ROWS.map(r => r[2]))];
+  return rowsToItems(raw, types, [])
+    .filter(x => x.status === 'new')
+    .map(x => ({
+      id:         `def-${x.data.code}`,
+      name:       x.data.name,
+      category:   x.data.category,
+      barcode:    x.data.barcode || null,
+      code:       x.data.code,
+      subType:    x.data.subType,
+      classFrom:  x.data.classFrom ?? null,
+      classTo:    x.data.classTo ?? null,
+      semester:   x.data.semester ?? null,
+      sizes:      x.data.sizes,
+      perStudent: x.data.perStudent,
+    }));
+}
 
 class CatalogService {
 
@@ -10,10 +42,20 @@ class CatalogService {
     try {
       await MigrationService.run();
       const json = await AsyncStorage.getItem(CATALOG_KEY);
+      if (json === null) return await this._seedDefaults();     // first run only (an emptied catalog is stored as [], not null)
       return json ? JSON.parse(json) : [];
     } catch {
       return [];
     }
+  }
+
+  // First run: store the default catalog. Never overwrites an existing catalog.
+  async _seedDefaults() {
+    const again = await AsyncStorage.getItem(CATALOG_KEY);
+    if (again !== null) return again ? JSON.parse(again) : [];
+    const list = buildDefaultCatalog();
+    try { await AsyncStorage.setItem(CATALOG_KEY, JSON.stringify(list)); } catch { /* shown anyway, retried next time */ }
+    return list;
   }
 
   async save(items) {

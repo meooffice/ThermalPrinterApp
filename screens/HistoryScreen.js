@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ReceiptHistory from '../services/ReceiptHistory';
 import BluetoothService from '../services/BluetoothService';
 import { buildReceiptBase64 } from '../services/ReceiptPrinter';
@@ -71,16 +72,16 @@ export default function HistoryScreen() {
       const connected = await BluetoothService.ensureConnected();
       if (!connected) { Alert.alert('Not Connected', 'Printer connect చేయండి.'); return; }
       const receipt = await ReceiptHistory.get(entry.id);   // full receipt is loaded only when needed
-      if (!receipt) { Alert.alert('❌ Failed', 'రశీదు data కనబడలేదు.'); return; }
+      if (!receipt) { Alert.alert('Failed', 'రశీదు data కనబడలేదు.'); return; }
       const settings = await SettingsService.get();
       const data = await buildReceiptBase64({
         settings, school: receipt.school, spell: receipt.spell || 1, items: receipt.items || [],
         invoiceNo: receipt.invoiceNo, when: new Date(receipt.savedAt), duplicate: true,
       });
       await BluetoothService.sendBase64(data);
-      Alert.alert('✅ Success', 'Reprinted successfully!');
+      Alert.alert('Success', 'Reprinted successfully!');
     } catch (error) {
-      Alert.alert('❌ Failed', error.message);
+      Alert.alert('Failed', error.message);
     } finally {
       setPrinting(null);
     }
@@ -105,11 +106,14 @@ export default function HistoryScreen() {
         {/* Card Header */}
         <View style={styles.cardHeader}>
           <View style={styles.cardIconWrap}>
-            <Text style={{ fontSize: 20 }}>{cancelled ? '🚫' : '🏫'}</Text>
+            <MaterialCommunityIcons name={cancelled ? 'cancel' : 'school-outline'} size={22} color={cancelled ? Colors.danger : Colors.primary} />
           </View>
           <View style={styles.cardInfo}>
             <Text style={styles.schoolName}>{item.schoolName || 'Receipt'}</Text>
-            <Text style={styles.dateText}>🕐 {formatDate(item.savedAt)}</Text>
+            <View style={styles.dateRow}>
+              <MaterialCommunityIcons name="clock-outline" size={12} color={Colors.textMuted} />
+              <Text style={styles.dateText}>{formatDate(item.savedAt)}</Text>
+            </View>
           </View>
           <View style={styles.spellBadge}>
             <Text style={styles.spellBadgeText}>Spell {item.spell || 1}</Text>
@@ -120,23 +124,28 @@ export default function HistoryScreen() {
         <View style={styles.cardMeta}>
           {item.invoiceNo ? (
             <View style={styles.metaChip}>
-              <Text style={styles.metaChipText}>🧾 {item.invoiceNo}</Text>
+              <MaterialCommunityIcons name="receipt-text-outline" size={12} color={Colors.textSecondary} />
+              <Text style={styles.metaChipText}>{item.invoiceNo}</Text>
             </View>
           ) : null}
           <View style={styles.metaChip}>
-            <Text style={styles.metaChipText}>📦 {item.itemCount} items</Text>
+            <MaterialCommunityIcons name="package-variant-closed" size={12} color={Colors.textSecondary} />
+            <Text style={styles.metaChipText}>{item.itemCount} items</Text>
           </View>
           <View style={styles.metaChip}>
-            <Text style={styles.metaChipText}>🔢 {item.totalQty} qty</Text>
+            <MaterialCommunityIcons name="pound" size={12} color={Colors.textSecondary} />
+            <Text style={styles.metaChipText}>{item.totalQty} qty</Text>
           </View>
           {item.channel && item.channel !== 'thermal' ? (
             <View style={styles.metaChip}>
-              <Text style={styles.metaChipText}>{item.channel === 'pdf' ? '📄 PDF' : '🖨️ System'}</Text>
+              <MaterialCommunityIcons name={item.channel === 'pdf' ? 'file-pdf-box' : 'printer'} size={12} color={Colors.textSecondary} />
+              <Text style={styles.metaChipText}>{item.channel === 'pdf' ? 'PDF' : 'System'}</Text>
             </View>
           ) : null}
           {item.legacy ? (
             <View style={[styles.metaChip, styles.chipLegacy]}>
-              <Text style={styles.metaChipText}>🧪 పాత (లెక్కలో లేదు)</Text>
+              <MaterialCommunityIcons name="flask-outline" size={12} color={Colors.textSecondary} />
+              <Text style={styles.metaChipText}>పాత (లెక్కలో లేదు)</Text>
             </View>
           ) : null}
           {cancelled ? (
@@ -158,7 +167,7 @@ export default function HistoryScreen() {
                 ? <ActivityIndicator color={Colors.primary} size="small" />
                 : (
                   <View style={styles.actionBtnInner}>
-                    <Text style={styles.reprintIcon}>🖨️</Text>
+                    <MaterialCommunityIcons name="printer" size={16} color={Colors.primary} />
                     <Text style={styles.reprintText}>Reprint</Text>
                   </View>
                 )}
@@ -166,14 +175,14 @@ export default function HistoryScreen() {
             {item.legacy ? (
               <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item.id)}>
                 <View style={styles.actionBtnInner}>
-                  <Text style={styles.deleteIcon}>🗑️</Text>
+                  <MaterialCommunityIcons name="trash-can-outline" size={16} color={Colors.danger} />
                   <Text style={styles.deleteText}>Delete</Text>
                 </View>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity style={styles.deleteBtn} onPress={() => handleCancel(item)}>
                 <View style={styles.actionBtnInner}>
-                  <Text style={styles.deleteIcon}>🚫</Text>
+                  <MaterialCommunityIcons name="cancel" size={16} color={Colors.danger} />
                   <Text style={styles.deleteText}>Cancel</Text>
                 </View>
               </TouchableOpacity>
@@ -205,13 +214,14 @@ export default function HistoryScreen() {
         {/* Subheader row */}
         <View style={styles.subHeader}>
           <View style={styles.countChip}>
-            <Text style={styles.countChipText}>📋 {history.length} records</Text>
+            <MaterialCommunityIcons name="clipboard-text-outline" size={14} color={Colors.primary} />
+            <Text style={styles.countChipText}>{history.length} records</Text>
           </View>
         </View>
 
         {history.length > 0 && (
           <View style={styles.searchBox}>
-            <Text style={styles.searchIcon}>🔍</Text>
+            <MaterialCommunityIcons name="magnify" size={20} color={Colors.textMuted} />
             <TextInput
               style={styles.searchInput}
               placeholder="Invoice no. లేదా school పేరు..."
@@ -221,7 +231,7 @@ export default function HistoryScreen() {
             />
             {search.length > 0 && (
               <TouchableOpacity onPress={() => setSearch('')}>
-                <Text style={{ fontSize: 16, color: Colors.textMuted }}>✕</Text>
+                <MaterialCommunityIcons name="close-circle" size={18} color={Colors.textMuted} />
               </TouchableOpacity>
             )}
           </View>
@@ -229,7 +239,7 @@ export default function HistoryScreen() {
 
         {loadError ? (
           <View style={styles.centered}>
-            <Text style={styles.emptyEmoji}>⚠️</Text>
+            <MaterialCommunityIcons name="alert-circle-outline" size={52} color={Colors.danger} style={styles.emptyIcon} />
             <Text style={styles.emptyTitle}>History చదవలేకపోయాను</Text>
             <Text style={styles.emptyHint}>{loadError}</Text>
             <TouchableOpacity style={styles.retryBtn} onPress={loadHistory}>
@@ -238,13 +248,13 @@ export default function HistoryScreen() {
           </View>
         ) : history.length === 0 ? (
           <View style={styles.centered}>
-            <Text style={styles.emptyEmoji}>📋</Text>
+            <MaterialCommunityIcons name="clipboard-text-outline" size={52} color={Colors.accent} style={styles.emptyIcon} />
             <Text style={styles.emptyTitle}>No history yet</Text>
             <Text style={styles.emptyHint}>Print చేసిన తర్వాత ఇక్కడ కనిపిస్తుంది</Text>
           </View>
         ) : visible.length === 0 ? (
           <View style={styles.centered}>
-            <Text style={styles.emptyEmoji}>🔍</Text>
+            <MaterialCommunityIcons name="file-search-outline" size={52} color={Colors.accent} style={styles.emptyIcon} />
             <Text style={styles.emptyTitle}>ఏమీ దొరకలేదు</Text>
             <Text style={styles.emptyHint}>వేరే పదంతో వెతకండి</Text>
           </View>
@@ -274,6 +284,9 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
   },
   countChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     backgroundColor: Colors.primaryLight,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs,
@@ -300,10 +313,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md, marginBottom: Spacing.sm,
     borderWidth: 0.5, borderColor: Colors.cardBorder, gap: Spacing.sm,
   },
-  searchIcon:  { fontSize: 16 },
   searchInput: { flex: 1, paddingVertical: Spacing.md, fontSize: 14, color: Colors.textPrimary },
   historyCardCancelled: { opacity: 0.6 },
-  chipLegacy:    { backgroundColor: '#fef9c3' },
+  chipLegacy:    { backgroundColor: '#FBF3C9' },
   chipCancelled: { backgroundColor: Colors.dangerBg },
   retryBtn:     { marginTop: Spacing.md, backgroundColor: Colors.primaryLight, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, borderRadius: Radius.md },
   retryBtnText: { color: Colors.primary, fontWeight: '700' },
@@ -314,25 +326,24 @@ const styles = StyleSheet.create({
   cardIconWrap: { width: 40, height: 40, backgroundColor: Colors.primaryLight, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
   cardInfo:     { flex: 1 },
   schoolName:   { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
-  dateText:     { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
+  dateRow:      { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  dateText:     { fontSize: 11, color: Colors.textMuted },
   spellBadge:   { backgroundColor: Colors.primaryLight, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: Radius.md },
   spellBadgeText: { fontSize: 11, color: Colors.primary, fontWeight: '700' },
 
   cardMeta: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap' },
-  metaChip: { backgroundColor: Colors.background, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: Radius.sm },
+  metaChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: Colors.background, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, borderRadius: Radius.sm },
   metaChipText: { fontSize: 11, color: Colors.textSecondary, fontWeight: '500' },
 
   cardActions:    { flexDirection: 'row', gap: Spacing.sm },
   actionBtnInner: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   reprintBtn:     { flex: 1, backgroundColor: Colors.primaryLight, padding: Spacing.sm, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
-  reprintIcon:    { fontSize: 14 },
   reprintText:    { color: Colors.primary, fontWeight: '600', fontSize: 13 },
   deleteBtn:      { flex: 1, backgroundColor: Colors.dangerBg, padding: Spacing.sm, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
-  deleteIcon:     { fontSize: 14 },
   deleteText:     { color: Colors.danger, fontWeight: '600', fontSize: 13 },
 
   // Empty
-  emptyEmoji: { fontSize: 52, marginBottom: Spacing.md },
+  emptyIcon:  { marginBottom: Spacing.md },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary, marginBottom: Spacing.xs },
   emptyHint:  { ...Typography.bodySm, textAlign: 'center' },
 });

@@ -1,35 +1,41 @@
-// theme.js — T-Print Android Design Tokens
-// Place this file at: src/theme.js (or constants/theme.js)
+// constants/Theme.js — SRKVM design tokens (uniform / bag greens). Themes.js re-exports this file.
 
 export const Colors = {
-  primary: '#4338ca',       // Indigo-700 — main brand
-  primaryDark: '#3730a3',   // Indigo-800 — header/status bar
-  primaryLight: '#ede9fe',  // Indigo-100 — chips, step buttons
+  primary: '#3F6B45',       // Uniform / bag green — main brand (buttons, header, active)
+  primaryDark: '#2B4A31',   // Deep forest green — titles, splash, status bar
+  primaryLight: '#E4F3EC',  // Mint — chips, icon circles, step buttons
   primaryText: '#fff',
 
   surface: '#ffffff',
-  background: '#f3f4f6',    // Gray-100 — screen bg
-  cardBorder: '#e5e7eb',    // Gray-200
+  background: '#F3F6EE',    // Soft sage-cream — screen bg
+  cardBorder: '#E3E8DC',    // Soft green-grey
 
-  textPrimary: '#111827',
-  textSecondary: '#374151',
-  textMuted: '#9ca3af',
-  textAccent: '#4338ca',
+  textPrimary: '#1F2A22',
+  textSecondary: '#3E4A41',
+  textMuted: '#6F7D72',
+  textAccent: '#3F6B45',
 
-  success: '#16a34a',
-  successBg: '#dcfce7',
-  successText: '#166534',
+  success: '#2E7D32',
+  successBg: '#DDEFD8',
+  successText: '#1E5B2A',
 
-  danger: '#dc2626',
+  danger: '#dc2626',        // unchanged: Cancel / Delete / errors
   dangerBg: '#fee2e2',
 
-  navActive: '#4338ca',
-  navInactive: '#9ca3af',
-  navActiveBg: '#ede9fe',
+  navActive: '#3F6B45',
+  navInactive: '#6F7D72',
+  navActiveBg: '#E4F3EC',
   navBar: '#ffffff',
-  navBorder: '#e5e7eb',
+  navBorder: '#E3E8DC',
 
-  statusBar: '#3730a3',
+  statusBar: '#2B4A31',
+
+  // extra tokens (new, nothing existing uses them yet)
+  accent: '#89A869',        // notebook leaf green
+  highlight: '#F9E68D',     // banner yellow
+  highlightText: '#6B5200',
+  warm: '#F6F3E4',          // light khaki surface
+  khaki: '#BEB291',
 };
 
 export const Spacing = {

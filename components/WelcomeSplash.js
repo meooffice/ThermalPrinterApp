@@ -4,6 +4,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, Image, Animated, TouchableWithoutFeedback, StyleSheet, Easing } from 'react-native';
 import { Colors, Spacing } from '../constants/Theme';
+import { APP_VERSION, APP_CREDITS } from '../constants/AppInfo';
 
 const SHOW_MS = 2400;   // how long the welcome stays
 const FADE_MS = 450;    // fade-out
@@ -46,7 +47,10 @@ export default function WelcomeSplash({ onDone }) {
           <Text style={styles.subtitle}>Kit Distribution System</Text>
           <View style={styles.line} />
           <Text style={styles.tagline}>Every kit · Every child · Every school</Text>
+          <Text style={styles.version}>{`Version ${APP_VERSION}`}</Text>
         </Animated.View>
+
+        <Animated.Text style={[styles.credits, { opacity: rise }]}>{APP_CREDITS}</Animated.Text>
 
         <Animated.Text style={[styles.hint, { opacity: rise }]}>Tap to continue</Animated.Text>
       </Animated.View>
@@ -67,5 +71,7 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 17, color: '#fff', fontWeight: '600', marginTop: 2 },
   line:     { width: 56, height: 3, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.5)', marginVertical: Spacing.lg },
   tagline:  { fontSize: 12, color: 'rgba(255,255,255,0.7)', letterSpacing: 0.4 },
+  version:  { fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: '700', letterSpacing: 0.6, marginTop: Spacing.md },
+  credits:  { position: 'absolute', bottom: 78, fontSize: 11, color: 'rgba(255,255,255,0.6)', letterSpacing: 0.3, textAlign: 'center', paddingHorizontal: Spacing.xl },
   hint:     { position: 'absolute', bottom: 48, fontSize: 11, color: 'rgba(255,255,255,0.5)' },
 });

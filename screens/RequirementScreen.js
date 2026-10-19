@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import CatalogService from '../services/CatalogService';
 import ItemTypeService from '../services/ItemTypeService';
 import SchoolService from '../services/SchoolService';
@@ -17,6 +18,8 @@ import { computeRequirement } from '../services/RequirementModel';
 import { Colors, Radius, Spacing, Typography } from '../constants/Theme';
 import { Card } from '../components/ui';
 import Hero from '../components/Hero';
+import SemesterChips from '../components/SemesterChips';
+import { semesterList, semesterMatches } from '../services/ItemModel';
 
 export default function RequirementScreen({ navigation }) {
   const [items, setItems]     = useState([]);
@@ -27,6 +30,7 @@ export default function RequirementScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
   const [search, setSearch]   = useState('');
+  const [sem, setSem]         = useState(null);            // Semester filter: null = All
   const [selected, setSelected] = useState(null);
 
   useFocusEffect(useCallback(() => { load(); }, []));
@@ -58,7 +62,9 @@ export default function RequirementScreen({ navigation }) {
   const defOf  = (id) => reqOf(id) - recOf(id);          // > 0 = deficit, < 0 = surplus
 
   const q = search.trim().toLowerCase();
-  const visibleItems = items.filter(i =>
+  const semList = useMemo(() => semesterList(items), [items]);
+  const inSem = items.filter(i => semesterMatches(i, sem));
+  const visibleItems = inSem.filter(i =>
     q === '' || i.name.toLowerCase().includes(q) || (i.code || '').toLowerCase().includes(q));
 
   const rows = useMemo(() => {
@@ -73,7 +79,7 @@ export default function RequirementScreen({ navigation }) {
     return out;
   }, [visibleItems, types]);
 
-  const deficitCount = items.filter(i => defOf(i.id) > 0).length;
+  const deficitCount = inSem.filter(i => defOf(i.id) > 0).length;
 
   const showNoRoll = () => {
     const names = req.noRoll.map(s => `• ${s.name}`).join('\n');
@@ -84,7 +90,14 @@ export default function RequirementScreen({ navigation }) {
   const defText  = (d) => (d > 0 ? `${d}` : d === 0 ? '0' : `+${-d}`);
 
   const renderRow = ({ item: row }) => {
-    if (row.header) return <Text style={styles.groupTitle}>🏷️  {row.header}</Text>;
+    if (row.header) {
+      return (
+        <View style={styles.groupRow}>
+          <MaterialCommunityIcons name="tag-outline" size={14} color={Colors.primary} />
+          <Text style={styles.groupTitle}>{row.header}</Text>
+        </View>
+      );
+    }
     const it = row.item;
     const d  = defOf(it.id);
     return (
@@ -92,11 +105,26 @@ export default function RequirementScreen({ navigation }) {
         <Card style={styles.itemCard}>
           <View style={styles.itemLeft}>
             <Text style={styles.itemName}>{it.name}</Text>
-            <Text style={styles.itemSub}>
-              {it.code ? `🔖 ${it.code}` : ''}
-              {it.subType && it.subType !== 'Common' ? `  ${it.subType === 'Boys' ? '👦' : '👧'} ${it.subType}` : ''}
-              {it.classFrom || it.classTo ? `  🎓 ${it.classFrom || 1}-${it.classTo || 12}` : ''}
-            </Text>
+            <View style={styles.itemSubRow}>
+              {it.code ? (
+                <View style={styles.subBit}>
+                  <MaterialCommunityIcons name="bookmark-outline" size={12} color={Colors.textMuted} />
+                  <Text style={styles.itemSub}>{it.code}</Text>
+                </View>
+              ) : null}
+              {it.subType && it.subType !== 'Common' ? (
+                <View style={styles.subBit}>
+                  <MaterialCommunityIcons name={it.subType === 'Boys' ? 'human-male' : 'human-female'} size={12} color={Colors.textMuted} />
+                  <Text style={styles.itemSub}>{it.subType}</Text>
+                </View>
+              ) : null}
+              {it.classFrom || it.classTo ? (
+                <View style={styles.subBit}>
+                  <MaterialCommunityIcons name="school-outline" size={12} color={Colors.textMuted} />
+                  <Text style={styles.itemSub}>{it.classFrom || 1}-{it.classTo || 12}</Text>
+                </View>
+              ) : null}
+            </View>
           </View>
           <View style={styles.nums}>
             <View style={styles.numCol}><Text style={styles.numLabel}>Required</Text><Text style={styles.numVal}>{reqOf(it.id)}</Text></View>
@@ -130,7 +158,7 @@ export default function RequirementScreen({ navigation }) {
 
         {error ? (
           <View style={styles.centered}>
-            <Text style={styles.emptyEmoji}>⚠️</Text>
+            <MaterialCommunityIcons name="alert-circle-outline" size={52} color={Colors.danger} style={styles.emptyIcon} />
             <Text style={styles.emptyTitle}>చదవలేకపోయాను</Text>
             <Text style={styles.emptyHint}>{error}</Text>
             <TouchableOpacity style={styles.retryBtn} onPress={load}>
@@ -139,13 +167,13 @@ export default function RequirementScreen({ navigation }) {
           </View>
         ) : items.length === 0 ? (
           <View style={styles.centered}>
-            <Text style={styles.emptyEmoji}>📦</Text>
+            <MaterialCommunityIcons name="package-variant-closed" size={52} color={Colors.accent} style={styles.emptyIcon} />
             <Text style={styles.emptyTitle}>Catalog లో items లేవు</Text>
             <Text style={styles.emptyHint}>ముందు Items Data లో items add చేయండి</Text>
           </View>
         ) : req.rollSchoolCount === 0 ? (
           <View style={styles.centered}>
-            <Text style={styles.emptyEmoji}>🏫</Text>
+            <MaterialCommunityIcons name="school-outline" size={52} color={Colors.accent} style={styles.emptyIcon} />
             <Text style={styles.emptyTitle}>ఏ school కీ roll నమోదు కాలేదు</Text>
             <Text style={styles.emptyHint}>Schools Data లో Min–Max classes మరియు roll నమోదు చేయండి</Text>
           </View>
@@ -153,21 +181,25 @@ export default function RequirementScreen({ navigation }) {
           <>
             <View style={styles.chipsRow}>
               <View style={[styles.chip, deficitCount > 0 && styles.chipRed]}>
-                <Text style={[styles.chipText, deficitCount > 0 && { color: Colors.danger }]}>⚠️ కొరత ఉన్న items: {deficitCount}</Text>
+                <MaterialCommunityIcons name="alert-outline" size={14} color={deficitCount > 0 ? Colors.danger : Colors.primary} />
+                <Text style={[styles.chipText, deficitCount > 0 && { color: Colors.danger }]}>కొరత ఉన్న items: {deficitCount}</Text>
               </View>
               <TouchableOpacity
                 style={[styles.chip, req.noRoll.length > 0 && styles.chipRed]}
                 disabled={req.noRoll.length === 0}
                 onPress={showNoRoll}
               >
+                <MaterialCommunityIcons name="school-outline" size={14} color={req.noRoll.length > 0 ? Colors.danger : Colors.primary} />
                 <Text style={[styles.chipText, req.noRoll.length > 0 && { color: Colors.danger }]}>
-                  🏫 Roll లేని schools: {req.noRoll.length}
+                  Roll లేని schools: {req.noRoll.length}
                 </Text>
               </TouchableOpacity>
             </View>
 
+            <SemesterChips list={semList} value={sem} onChange={setSem} />
+
             <View style={styles.searchBox}>
-              <Text style={styles.searchIcon}>🔍</Text>
+              <MaterialCommunityIcons name="magnify" size={20} color={Colors.textMuted} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Item పేరు లేదా code..."
@@ -177,7 +209,7 @@ export default function RequirementScreen({ navigation }) {
               />
               {search.length > 0 && (
                 <TouchableOpacity onPress={() => setSearch('')}>
-                  <Text style={{ fontSize: 16, color: Colors.textMuted }}>✕</Text>
+                  <MaterialCommunityIcons name="close-circle" size={18} color={Colors.textMuted} />
                 </TouchableOpacity>
               )}
             </View>
@@ -206,7 +238,8 @@ export default function RequirementScreen({ navigation }) {
             <View style={styles.sheetTop}>
               <Text style={styles.modalTitle} numberOfLines={2}>{selected?.name}</Text>
               <TouchableOpacity style={styles.closeBtn} onPress={() => setSelected(null)}>
-                <Text style={styles.closeBtnText}>✕  Close</Text>
+                <MaterialCommunityIcons name="close" size={14} color={Colors.textSecondary} />
+                <Text style={styles.closeBtnText}>Close</Text>
               </TouchableOpacity>
             </View>
             {selected && (
@@ -244,7 +277,7 @@ const styles = StyleSheet.create({
   backBtnText: { fontSize: 16, color: Colors.primary, fontWeight: '600' },
 
   chipsRow: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap', marginBottom: Spacing.sm },
-  chip:     { backgroundColor: Colors.primaryLight, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: Radius.full },
+  chip:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: Colors.primaryLight, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: Radius.full },
   chipRed:  { backgroundColor: Colors.dangerBg },
   chipText: { fontSize: 12, fontWeight: '600', color: Colors.primary },
 
@@ -254,15 +287,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md, marginBottom: Spacing.sm,
     borderWidth: 0.5, borderColor: Colors.cardBorder, gap: Spacing.sm,
   },
-  searchIcon:  { fontSize: 16 },
   searchInput: { flex: 1, paddingVertical: Spacing.md, fontSize: 14, color: Colors.textPrimary },
 
-  groupTitle: { ...Typography.label, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: Spacing.sm, marginBottom: Spacing.xs },
+  groupRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: Spacing.sm, marginBottom: Spacing.xs },
+  groupTitle: { ...Typography.label, textTransform: 'uppercase', letterSpacing: 0.8, color: Colors.primaryDark, fontWeight: '700' },
 
   itemCard: { marginBottom: Spacing.sm, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   itemLeft: { flex: 1 },
   itemName: { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
-  itemSub:  { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
+  itemSubRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.sm, marginTop: 2 },
+  subBit:   { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  itemSub:  { fontSize: 11, color: Colors.textMuted },
   nums:     { flexDirection: 'row', gap: Spacing.md },
   numCol:   { alignItems: 'center', minWidth: 52 },
   numLabel: { fontSize: 9, color: Colors.textMuted },
@@ -271,7 +306,7 @@ const styles = StyleSheet.create({
   defZero:  { color: Colors.textMuted },
   defPos:   { color: Colors.success },
 
-  emptyEmoji: { fontSize: 52, marginBottom: Spacing.md },
+  emptyIcon:  { marginBottom: Spacing.md },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary, marginBottom: Spacing.xs },
   emptyHint:  { ...Typography.bodySm, textAlign: 'center' },
   retryBtn:     { marginTop: Spacing.md, backgroundColor: Colors.primaryLight, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, borderRadius: Radius.md },
@@ -287,7 +322,7 @@ const styles = StyleSheet.create({
   modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.cardBorder, alignSelf: 'center', marginBottom: Spacing.md },
   sheetTop:    { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.xs },
   modalTitle:  { flex: 1, fontSize: 18, fontWeight: '800', color: Colors.primaryDark },
-  closeBtn:    { backgroundColor: Colors.background, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.cardBorder },
+  closeBtn:    { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: Colors.background, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.cardBorder },
   closeBtnText:{ color: Colors.textSecondary, fontWeight: '700', fontSize: 12 },
   sheetSummary:{ fontSize: 13, fontWeight: '700', color: Colors.textSecondary, marginBottom: Spacing.sm },
 

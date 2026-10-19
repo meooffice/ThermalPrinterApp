@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import CatalogService from '../services/CatalogService';
 import ItemTypeService from '../services/ItemTypeService';
 import SettingsService from '../services/SettingsService';
@@ -16,8 +17,20 @@ import { buildStockEntry, receivedTotals, todayISO } from '../services/StockMode
 import { Colors, Radius, Spacing, Typography } from '../constants/Theme';
 import { Card } from '../components/ui';
 import Hero from '../components/Hero';
+import SemesterChips from '../components/SemesterChips';
+import { semesterList, semesterMatches } from '../services/ItemModel';
 
 const EMPTY_GIVEN = { byItem: {}, bySchool: {}, schoolNames: {} };
+
+// Section heading with an icon (display only)
+function SectionHead({ icon, label }) {
+  return (
+    <View style={styles.sectionRow}>
+      <MaterialCommunityIcons name={icon} size={16} color={Colors.primary} />
+      <Text style={styles.sectionTitle}>{label}</Text>
+    </View>
+  );
+}
 
 export default function StockScreen({ navigation }) {
   const insets = useSafeAreaInsets(); // keep sheet buttons above the Android navigation bar
@@ -29,6 +42,7 @@ export default function StockScreen({ navigation }) {
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState(null);
   const [search, setSearch]     = useState('');
+  const [sem, setSem]           = useState(null);          // Semester filter: null = All
 
   // detail sheet
   const [selected, setSelected] = useState(null);
@@ -42,11 +56,16 @@ export default function StockScreen({ navigation }) {
   // bulk add (many items of one Type at once)
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkType, setBulkType] = useState('');
+  const [bulkSem, setBulkSem]   = useState(null);          // Semester filter inside Bulk Add: null = All
   const [bulkQty, setBulkQty]   = useState({});          // { 'itemId|size': '500' }  (size is '' for items without sizes)
   const [bulkDate, setBulkDate] = useState(todayISO());
   const [bulkNote, setBulkNote] = useState('');
   const [bulkBusy, setBulkBusy] = useState(false);
   const bulkRefs = useRef({});
+  const bulkScrollRef = useRef(null);                        // Bulk Add list: focused box is scrolled to the top, clear of the keyboard
+  const [bulkFocus, setBulkFocus] = useState(null);          // focused box key (its hint text is hidden so the cursor sits in the centre)
+  const bulkRowY = useRef({});                               // itemId -> row y inside the scroll content
+  const [bulkViewH, setBulkViewH] = useState(400);           // visible list height (bottom padding = this, so even the last row can reach the top)
 
   useFocusEffect(useCallback(() => { load(); }, []));
 
@@ -78,7 +97,9 @@ export default function StockScreen({ navigation }) {
 
   // ── list rows (grouped by Item Type) ───────────────────────────────────────
   const q = search.trim().toLowerCase();
-  const visibleItems = items.filter(i =>
+  const semList = useMemo(() => semesterList(items), [items]);
+  const inSem = items.filter(i => semesterMatches(i, sem));
+  const visibleItems = inSem.filter(i =>
     q === '' || i.name.toLowerCase().includes(q) || (i.code || '').toLowerCase().includes(q));
 
   const rows = useMemo(() => {
@@ -93,15 +114,15 @@ export default function StockScreen({ navigation }) {
     return out;
   }, [visibleItems, types]);
 
-  const negativeCount = items.filter(i => balOf(i.id) < 0).length;
-  const noStockCount  = items.filter(i => recOf(i.id) === 0).length;
+  const negativeCount = inSem.filter(i => balOf(i.id) < 0).length;
+  const noStockCount  = inSem.filter(i => recOf(i.id) === 0).length;
 
   // ── bulk add ───────────────────────────────────────────────────────────────
   const bulkTypes = useMemo(() => {
     const cats = [...new Set(items.map(i => i.category || 'Others'))];
     return [...types.filter(t => cats.includes(t)), ...cats.filter(c => !types.includes(c))];
   }, [items, types]);
-  const bulkItems = useMemo(() => items.filter(i => (i.category || 'Others') === bulkType), [items, bulkType]);
+  const bulkItems = useMemo(() => items.filter(i => (i.category || 'Others') === bulkType && semesterMatches(i, bulkSem)), [items, bulkType, bulkSem]);
   // keyboard order: date, note, then every quantity box of the chosen Type (top to bottom)
   const bulkOrder = useMemo(() => {
     const keys = ['date', 'note'];
@@ -119,10 +140,17 @@ export default function StockScreen({ navigation }) {
     else Keyboard.dismiss();
   };
   // Next (→) on every box, Done (✓) on the last one
-  const bulkInput = (key) => {
+  const bulkScrollTo = (rowId) => {
+    const y = rowId ? bulkRowY.current[rowId] : 0;           // date / note boxes: top of the list
+    if (y == null) return;
+    setTimeout(() => bulkScrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true }), 80);
+  };
+  const bulkInput = (key, rowId) => {
     const last = key === bulkOrder[bulkOrder.length - 1];
     return {
       ref: (el) => { bulkRefs.current[key] = el; },
+      onFocus: () => { setBulkFocus(key); bulkScrollTo(rowId); },
+      onBlur: () => setBulkFocus(f => (f === key ? null : f)),
       returnKeyType: last ? 'done' : 'next',
       blurOnSubmit: last,
       onSubmitEditing: () => bulkNext(key),
@@ -133,6 +161,7 @@ export default function StockScreen({ navigation }) {
   const openBulk = () => {
     setBulkQty({}); setBulkDate(todayISO()); setBulkNote('');
     setBulkType(bulkTypes[0] || '');
+    setBulkSem(sem);
     setBulkOpen(true);
   };
 
@@ -155,7 +184,7 @@ export default function StockScreen({ navigation }) {
       await StockService.addMany(list);
       setEntries(await StockService.getAll());
       setBulkOpen(false);
-      Alert.alert('✅ Stock జోడించబడింది', `${list.length} entries జోడించబడ్డాయి.`);
+      Alert.alert('Stock జోడించబడింది', `${list.length} entries జోడించబడ్డాయి.`);
     } catch (e) {
       Alert.alert('Save కాలేదు', e.message);
     } finally {
@@ -223,7 +252,14 @@ export default function StockScreen({ navigation }) {
   const balStyle = (b) => (b < 0 ? styles.balNeg : b === 0 ? styles.balZero : styles.balPos);
 
   const renderRow = ({ item: row }) => {
-    if (row.header) return <Text style={styles.groupTitle}>🏷️  {row.header}</Text>;
+    if (row.header) {
+      return (
+        <View style={styles.groupRow}>
+          <MaterialCommunityIcons name="tag-outline" size={14} color={Colors.primary} />
+          <Text style={styles.groupTitle}>{row.header}</Text>
+        </View>
+      );
+    }
     const it = row.item;
     const bal = balOf(it.id);
     return (
@@ -231,11 +267,26 @@ export default function StockScreen({ navigation }) {
         <Card style={styles.itemCard}>
           <View style={styles.itemLeft}>
             <Text style={styles.itemName}>{it.name}</Text>
-            <Text style={styles.itemSub}>
-              {it.code ? `🔖 ${it.code}` : ''}
-              {it.subType && it.subType !== 'Common' ? `  ${it.subType === 'Boys' ? '👦' : '👧'} ${it.subType}` : ''}
-              {it.sizes && it.sizes.length ? `  📏 ${it.sizes.length} sizes` : ''}
-            </Text>
+            <View style={styles.itemSubRow}>
+              {it.code ? (
+                <View style={styles.subBit}>
+                  <MaterialCommunityIcons name="bookmark-outline" size={12} color={Colors.textMuted} />
+                  <Text style={styles.itemSub}>{it.code}</Text>
+                </View>
+              ) : null}
+              {it.subType && it.subType !== 'Common' ? (
+                <View style={styles.subBit}>
+                  <MaterialCommunityIcons name={it.subType === 'Boys' ? 'human-male' : 'human-female'} size={12} color={Colors.textMuted} />
+                  <Text style={styles.itemSub}>{it.subType}</Text>
+                </View>
+              ) : null}
+              {it.sizes && it.sizes.length ? (
+                <View style={styles.subBit}>
+                  <MaterialCommunityIcons name="ruler" size={12} color={Colors.textMuted} />
+                  <Text style={styles.itemSub}>{it.sizes.length} sizes</Text>
+                </View>
+              ) : null}
+            </View>
           </View>
           <View style={styles.nums}>
             <View style={styles.numCol}><Text style={styles.numLabel}>Received</Text><Text style={styles.numVal}>{recOf(it.id)}</Text></View>
@@ -267,14 +318,15 @@ export default function StockScreen({ navigation }) {
           </TouchableOpacity>
           {!error && items.length > 0 && (
             <TouchableOpacity style={styles.bulkBtn} onPress={openBulk}>
-              <Text style={styles.bulkBtnText}>📥  Bulk Add</Text>
+              <MaterialCommunityIcons name="inbox-arrow-down" size={16} color={Colors.primary} />
+              <Text style={styles.bulkBtnText}>Bulk Add</Text>
             </TouchableOpacity>
           )}
         </View>
 
         {error ? (
           <View style={styles.centered}>
-            <Text style={styles.emptyEmoji}>⚠️</Text>
+            <MaterialCommunityIcons name="alert-circle-outline" size={52} color={Colors.danger} style={styles.emptyIcon} />
             <Text style={styles.emptyTitle}>చదవలేకపోయాను</Text>
             <Text style={styles.emptyHint}>{error}</Text>
             <TouchableOpacity style={styles.retryBtn} onPress={load}>
@@ -283,7 +335,7 @@ export default function StockScreen({ navigation }) {
           </View>
         ) : items.length === 0 ? (
           <View style={styles.centered}>
-            <Text style={styles.emptyEmoji}>📦</Text>
+            <MaterialCommunityIcons name="package-variant-closed" size={52} color={Colors.accent} style={styles.emptyIcon} />
             <Text style={styles.emptyTitle}>Catalog లో items లేవు</Text>
             <Text style={styles.emptyHint}>ముందు Items Data లో items add చేయండి</Text>
           </View>
@@ -291,15 +343,19 @@ export default function StockScreen({ navigation }) {
           <>
             <View style={styles.chipsRow}>
               <View style={[styles.chip, negativeCount > 0 && styles.chipRed]}>
-                <Text style={[styles.chipText, negativeCount > 0 && { color: Colors.danger }]}>⚠️ Balance ఋణం: {negativeCount}</Text>
+                <MaterialCommunityIcons name="alert-outline" size={14} color={negativeCount > 0 ? Colors.danger : Colors.primary} />
+                <Text style={[styles.chipText, negativeCount > 0 && { color: Colors.danger }]}>Balance ఋణం: {negativeCount}</Text>
               </View>
               <View style={styles.chip}>
-                <Text style={styles.chipText}>📭 Stock నమోదు కానివి: {noStockCount}</Text>
+                <MaterialCommunityIcons name="inbox-outline" size={14} color={Colors.primary} />
+                <Text style={styles.chipText}>Stock నమోదు కానివి: {noStockCount}</Text>
               </View>
             </View>
 
+            <SemesterChips list={semList} value={sem} onChange={setSem} />
+
             <View style={styles.searchBox}>
-              <Text style={styles.searchIcon}>🔍</Text>
+              <MaterialCommunityIcons name="magnify" size={20} color={Colors.textMuted} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Item పేరు లేదా code..."
@@ -309,7 +365,7 @@ export default function StockScreen({ navigation }) {
               />
               {search.length > 0 && (
                 <TouchableOpacity onPress={() => setSearch('')}>
-                  <Text style={{ fontSize: 16, color: Colors.textMuted }}>✕</Text>
+                  <MaterialCommunityIcons name="close-circle" size={18} color={Colors.textMuted} />
                 </TouchableOpacity>
               )}
             </View>
@@ -343,7 +399,8 @@ export default function StockScreen({ navigation }) {
             <View style={styles.sheetTop}>
               <Text style={styles.modalTitle} numberOfLines={2}>{selected?.name}</Text>
               <TouchableOpacity style={styles.closeBtn} onPress={closeDetail}>
-                <Text style={styles.closeBtnText}>✕  Close</Text>
+                <MaterialCommunityIcons name="close" size={14} color={Colors.textSecondary} />
+                <Text style={styles.closeBtnText}>Close</Text>
               </TouchableOpacity>
             </View>
 
@@ -357,7 +414,10 @@ export default function StockScreen({ navigation }) {
             <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 120 }}>
               {/* Add / edit form */}
               <View style={styles.formBox}>
-                <Text style={styles.formTitle}>{editingId ? '✏️  Entry మార్చండి' : '＋  Stock Received జోడించండి'}</Text>
+                <View style={styles.formTitleRow}>
+                  <MaterialCommunityIcons name={editingId ? 'pencil-outline' : 'plus-circle-outline'} size={16} color={Colors.primary} />
+                  <Text style={styles.formTitle}>{editingId ? 'Entry మార్చండి' : 'Stock Received జోడించండి'}</Text>
+                </View>
 
                 <Text style={styles.inputLabel}>సంఖ్య *</Text>
                 <TextInput
@@ -417,7 +477,7 @@ export default function StockScreen({ navigation }) {
                   <TouchableOpacity style={[styles.saveBtn, busy && { opacity: 0.6 }]} onPress={handleSaveEntry} disabled={busy}>
                     {busy
                       ? <ActivityIndicator color={Colors.primaryText} />
-                      : <Text style={styles.saveBtnText}>{editingId ? '✅  Update' : '＋  Add Stock'}</Text>}
+                      : <Text style={styles.saveBtnText}>{editingId ? 'Update' : 'Add Stock'}</Text>}
                   </TouchableOpacity>
                 </View>
               </View>
@@ -436,7 +496,7 @@ export default function StockScreen({ navigation }) {
                 const otherR = recOf(selected.id) - sumR, otherG = givOf(selected.id) - sumG;   // entered / given without a size
                 return (
                   <>
-                    <Text style={styles.sectionTitle}>📏  Size వారీ</Text>
+                    <SectionHead icon="ruler" label="Size వారీ" />
                     <View style={styles.sizeTable}>
                       <View style={styles.sizeTr}>
                         <Text style={[styles.sizeTh, { flex: 1.2 }]}>Size</Text>
@@ -466,7 +526,7 @@ export default function StockScreen({ navigation }) {
               })()}
 
               {/* Entries */}
-              <Text style={styles.sectionTitle}>📥  Received entries ({itemEntries.length})</Text>
+              <SectionHead icon="inbox-arrow-down" label={`Received entries (${itemEntries.length})`} />
               {itemEntries.length === 0 ? (
                 <Text style={styles.mutedText}>ఇంకా ఏ entry లేదు.</Text>
               ) : itemEntries.map(e => (
@@ -475,19 +535,22 @@ export default function StockScreen({ navigation }) {
                     <Text style={styles.entryMain}>
                       {e.qty}{e.size ? `   ·   size ${e.size}` : ''}
                     </Text>
-                    <Text style={styles.entryMeta}>📅 {e.date}{e.note ? `   ·   ${e.note}` : ''}</Text>
+                    <View style={styles.entryMetaRow}>
+                      <MaterialCommunityIcons name="calendar-outline" size={12} color={Colors.textMuted} />
+                      <Text style={styles.entryMeta}>{e.date}{e.note ? `   ·   ${e.note}` : ''}</Text>
+                    </View>
                   </View>
                   <TouchableOpacity style={styles.editBtn} onPress={() => startEdit(e)}>
-                    <Text style={{ fontSize: 15 }}>✏️</Text>
+                    <MaterialCommunityIcons name="pencil-outline" size={18} color={Colors.primary} />
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteEntry(e)}>
-                    <Text style={{ fontSize: 15 }}>🗑️</Text>
+                    <MaterialCommunityIcons name="trash-can-outline" size={18} color={Colors.danger} />
                   </TouchableOpacity>
                 </View>
               ))}
 
               {/* Given by school */}
-              <Text style={styles.sectionTitle}>🏫  ఇచ్చినవి (schools వారీగా)</Text>
+              <SectionHead icon="school-outline" label="ఇచ్చినవి (schools వారీగా)" />
               {givenBySchool.length === 0 ? (
                 <Text style={styles.mutedText}>ఇంకా ఎవరికీ ఇవ్వలేదు.</Text>
               ) : givenBySchool.map(r => (
@@ -508,12 +571,13 @@ export default function StockScreen({ navigation }) {
           <View style={[styles.modalSheet, { height: '92%' }, { paddingBottom: Spacing.lg + insets.bottom }]}>
             <View style={styles.modalHandle} />
             <View style={styles.sheetTop}>
-              <Text style={styles.modalTitle}>📥  Bulk Stock Add</Text>
+              <Text style={styles.modalTitle}>Bulk Stock Add</Text>
               <TouchableOpacity style={styles.closeBtn} onPress={() => setBulkOpen(false)}>
-                <Text style={styles.closeBtnText}>✕  Close</Text>
+                <MaterialCommunityIcons name="close" size={14} color={Colors.textSecondary} />
+                <Text style={styles.closeBtnText}>Close</Text>
               </TouchableOpacity>
             </View>
-            <Text style={styles.bulkHint}>Type ఎంచుకుని, వచ్చిన items సంఖ్య మాత్రమే రాయండి. ఖాళీ లేదా 0 ఉంటే ఆ item skip అవుతుంది.</Text>
+            <Text style={styles.bulkHint}>Type ఎంచుకుని, వచ్చిన items సంఖ్య మాత్రమే రాయండి. ఖాళీ లేదా 0 ఉంటే ఆ item skip అవుతుంది. ({bulkItems.length} items)</Text>
 
             <View style={{ height: 44 }}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: Spacing.xs, alignItems: 'center' }}>
@@ -525,7 +589,11 @@ export default function StockScreen({ navigation }) {
               </ScrollView>
             </View>
 
-            <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 260 }}>
+            <View style={{ marginTop: Spacing.sm }}>
+              <SemesterChips list={semList} value={bulkSem} onChange={setBulkSem} />
+            </View>
+
+            <ScrollView ref={bulkScrollRef} style={{ flex: 1 }} keyboardShouldPersistTaps="handled" onLayout={e => setBulkViewH(e.nativeEvent.layout.height)} contentContainerStyle={{ paddingBottom: Math.max(260, bulkViewH) }}>
               <View style={styles.formBox}>
                 <Text style={styles.inputLabel}>తేదీ (YYYY-MM-DD)</Text>
                 <TextInput
@@ -551,27 +619,33 @@ export default function StockScreen({ navigation }) {
               </View>
 
               {bulkItems.length === 0 ? (
-                <Text style={styles.mutedText}>ఈ Type లో items లేవు.</Text>
+                <Text style={styles.mutedText}>ఈ Type / Semester లో items లేవు.</Text>
               ) : bulkItems.map(it => {
                 const sizes = Array.isArray(it.sizes) ? it.sizes : [];
                 return (
-                  <View key={it.id} style={styles.bulkItem}>
+                  <View key={it.id} style={styles.bulkItem} onLayout={e => { bulkRowY.current[it.id] = e.nativeEvent.layout.y; }}>
                     <View style={styles.bulkItemHead}>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.itemName}>{it.name}</Text>
-                        <Text style={styles.itemSub}>Balance {balOf(it.id)}{it.code ? `  ·  🔖 ${it.code}` : ''}</Text>
+                        <Text style={styles.itemSub}>Balance {balOf(it.id)}{it.code ? `  ·  ${it.code}` : ''}</Text>
                       </View>
                       {sizes.length === 0 && (
-                        <TextInput
-                          style={styles.bulkQtyInput}
-                          value={bulkQty[`${it.id}|`] || ''}
-                          onChangeText={v => setBulkQ(`${it.id}|`, v)}
-                          placeholder="సంఖ్య"
-                          keyboardType="numeric"
-                          maxLength={7}
-                          placeholderTextColor={Colors.textMuted}
-                          {...bulkInput(`${it.id}|`)}
-                        />
+                        <View>
+                          {/* no native placeholder: on Android it pushes the cursor to the right edge of a centred box */}
+                          <TextInput
+                            style={styles.bulkQtyInput}
+                            value={bulkQty[`${it.id}|`] || ''}
+                            onChangeText={v => setBulkQ(`${it.id}|`, v)}
+                            keyboardType="numeric"
+                            maxLength={7}
+                            {...bulkInput(`${it.id}|`, it.id)}
+                          />
+                          {!bulkQty[`${it.id}|`] && bulkFocus !== `${it.id}|` && (
+                            <View style={styles.bulkQtyHintWrap} pointerEvents="none">
+                              <Text style={styles.bulkQtyHint}>సంఖ్య</Text>
+                            </View>
+                          )}
+                        </View>
                       )}
                     </View>
                     {sizes.length > 0 && (
@@ -585,7 +659,7 @@ export default function StockScreen({ navigation }) {
                               onChangeText={v => setBulkQ(`${it.id}|${sz}`, v)}
                               keyboardType="numeric"
                               maxLength={7}
-                              {...bulkInput(`${it.id}|${sz}`)}
+                              {...bulkInput(`${it.id}|${sz}`, it.id)}
                             />
                           </View>
                         ))}
@@ -603,7 +677,7 @@ export default function StockScreen({ navigation }) {
               <TouchableOpacity style={[styles.saveBtn, (bulkBusy || bulkFilled === 0) && { opacity: 0.6 }]} onPress={handleBulkSave} disabled={bulkBusy || bulkFilled === 0}>
                 {bulkBusy
                   ? <ActivityIndicator color={Colors.primaryText} />
-                  : <Text style={styles.saveBtnText}>✅  Save ({bulkFilled})</Text>}
+                  : <Text style={styles.saveBtnText}>Save ({bulkFilled})</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -619,7 +693,7 @@ const styles = StyleSheet.create({
   centered:  { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   topRow:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  bulkBtn:     { borderWidth: 1.5, borderColor: Colors.primary, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.lg },
+  bulkBtn:     { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1.5, borderColor: Colors.primary, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.lg },
   bulkBtnText: { color: Colors.primary, fontWeight: '700', fontSize: 13 },
   bulkHint:    { fontSize: 12, color: Colors.textMuted, marginBottom: Spacing.sm },
   typeChip:    { paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.cardBorder, backgroundColor: Colors.surface },
@@ -628,6 +702,8 @@ const styles = StyleSheet.create({
   typeChipTextActive: { color: Colors.primaryText },
   bulkItem:     { paddingVertical: Spacing.sm, borderBottomWidth: 0.5, borderBottomColor: Colors.cardBorder },
   bulkItemHead: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  bulkQtyHintWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  bulkQtyHint:  { fontSize: 14, color: Colors.textMuted },
   bulkQtyInput: { width: 110, borderWidth: 1, borderColor: Colors.cardBorder, borderRadius: Radius.md, padding: Spacing.sm, fontSize: 14, color: Colors.textPrimary, backgroundColor: Colors.surface, textAlign: 'center' },
   sizeCell:      { width: 62, alignItems: 'center', marginTop: Spacing.xs },
   sizeCellLabel: { fontSize: 11, fontWeight: '800', color: Colors.textSecondary, marginBottom: 2 },
@@ -636,7 +712,7 @@ const styles = StyleSheet.create({
   backBtnText: { fontSize: 16, color: Colors.primary, fontWeight: '600' },
 
   chipsRow: { flexDirection: 'row', gap: Spacing.sm, flexWrap: 'wrap', marginBottom: Spacing.sm },
-  chip:     { backgroundColor: Colors.primaryLight, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: Radius.full },
+  chip:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: Colors.primaryLight, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: Radius.full },
   chipRed:  { backgroundColor: Colors.dangerBg },
   chipText: { fontSize: 12, fontWeight: '600', color: Colors.primary },
 
@@ -646,15 +722,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md, marginBottom: Spacing.sm,
     borderWidth: 0.5, borderColor: Colors.cardBorder, gap: Spacing.sm,
   },
-  searchIcon:  { fontSize: 16 },
   searchInput: { flex: 1, paddingVertical: Spacing.md, fontSize: 14, color: Colors.textPrimary },
 
-  groupTitle: { ...Typography.label, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: Spacing.sm, marginBottom: Spacing.xs },
+  groupRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: Spacing.sm, marginBottom: Spacing.xs },
+  groupTitle: { ...Typography.label, textTransform: 'uppercase', letterSpacing: 0.8, color: Colors.primaryDark, fontWeight: '700' },
 
   itemCard: { marginBottom: Spacing.sm, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   itemLeft: { flex: 1 },
   itemName: { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
-  itemSub:  { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
+  itemSubRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: Spacing.sm, marginTop: 2 },
+  subBit:   { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  itemSub:  { fontSize: 11, color: Colors.textMuted },
   nums:     { flexDirection: 'row', gap: Spacing.md },
   numCol:   { alignItems: 'center', minWidth: 52 },
   numLabel: { fontSize: 9, color: Colors.textMuted },
@@ -663,7 +741,7 @@ const styles = StyleSheet.create({
   balZero:  { color: Colors.textMuted },
   balPos:   { color: Colors.success },
 
-  emptyEmoji: { fontSize: 52, marginBottom: Spacing.md },
+  emptyIcon:  { marginBottom: Spacing.md },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary, marginBottom: Spacing.xs },
   emptyHint:  { ...Typography.bodySm, textAlign: 'center' },
   retryBtn:     { marginTop: Spacing.md, backgroundColor: Colors.primaryLight, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, borderRadius: Radius.md },
@@ -680,12 +758,13 @@ const styles = StyleSheet.create({
   modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.cardBorder, alignSelf: 'center', marginBottom: Spacing.md },
   sheetTop:    { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.xs },
   modalTitle:  { flex: 1, fontSize: 18, fontWeight: '800', color: Colors.primaryDark },
-  closeBtn:    { backgroundColor: Colors.background, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.cardBorder },
+  closeBtn:    { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: Colors.background, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.cardBorder },
   closeBtnText:{ color: Colors.textSecondary, fontWeight: '700', fontSize: 12 },
   sheetSummary:{ fontSize: 13, fontWeight: '700', color: Colors.textSecondary, marginBottom: Spacing.sm },
 
   formBox:   { backgroundColor: Colors.background, borderRadius: Radius.md, padding: Spacing.md, marginBottom: Spacing.sm },
-  formTitle: { fontSize: 13, fontWeight: '800', color: Colors.primary, marginBottom: Spacing.xs },
+  formTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.xs },
+  formTitle: { fontSize: 13, fontWeight: '800', color: Colors.primary },
   inputLabel:{ ...Typography.label, marginBottom: Spacing.xs, marginTop: Spacing.xs },
   input: {
     borderWidth: 1, borderColor: Colors.cardBorder, borderRadius: Radius.md,
@@ -704,7 +783,8 @@ const styles = StyleSheet.create({
   saveBtn:       { flex: 2, backgroundColor: Colors.primary, padding: Spacing.md, borderRadius: Radius.md, alignItems: 'center' },
   saveBtnText:   { color: Colors.primaryText, fontWeight: '700' },
 
-  sectionTitle: { ...Typography.label, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: Spacing.md, marginBottom: Spacing.xs },
+  sectionRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: Spacing.md, marginBottom: Spacing.xs },
+  sectionTitle: { ...Typography.label, textTransform: 'uppercase', letterSpacing: 0.8, color: Colors.primaryDark, fontWeight: '700' },
   mutedText:    { fontSize: 12, color: Colors.textMuted },
   sizeTable: { borderWidth: 0.5, borderColor: Colors.cardBorder, borderRadius: Radius.md, overflow: 'hidden', marginBottom: Spacing.sm },
   sizeTr:    { flexDirection: 'row', paddingVertical: 6, paddingHorizontal: Spacing.sm, borderBottomWidth: 0.5, borderBottomColor: Colors.cardBorder },
@@ -715,7 +795,8 @@ const styles = StyleSheet.create({
   entryRow:        { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, paddingVertical: Spacing.sm, borderBottomWidth: 0.5, borderBottomColor: Colors.cardBorder },
   entryRowEditing: { backgroundColor: Colors.primaryLight },
   entryMain:       { fontSize: 14, fontWeight: '800', color: Colors.textPrimary },
-  entryMeta:       { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
+  entryMetaRow:    { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  entryMeta:       { fontSize: 11, color: Colors.textMuted },
   editBtn:         { backgroundColor: Colors.primaryLight, padding: Spacing.sm, borderRadius: Radius.sm },
   deleteBtn:       { backgroundColor: Colors.dangerBg, padding: Spacing.sm, borderRadius: Radius.sm },
 

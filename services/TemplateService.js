@@ -3,36 +3,26 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { utils, write } from 'xlsx';
+import { DEFAULT_ITEM_ROWS, DEFAULT_ITEM_INSTRUCTIONS } from '../constants/DefaultItems';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 const ITEM_HEADERS = ['Code', 'Name', 'Type', 'SubType', 'ClassFrom', 'ClassTo', 'Semester', 'Sizes', 'Barcode',
   'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'N8', 'N9', 'N10', 'N11', 'N12'];
 
-const pad = (arr) => [...arr, ...Array(ITEM_HEADERS.length - arr.length).fill('')];
-// EXAMPLE rows – delete them before real use
-const ITEM_SAMPLES = [
-  pad(['1-TELTB-SEM1', 'Telugu TB Sem1', 'Prime Textbook', 'Common', 1, 1, 1, '', '']),
-  pad(['NB-UNRULED', 'Notebook UnRuled', 'Notebooks', 'Common', 6, 10, '', '', '', '', '', '', '', '', 3, 3, 2, 2, 2]),
-  pad(['BAG', 'School Bag', 'Kits', 'Common', '', '', '', 'S,M,L', '']),
-  pad(['SHOE-B', 'Shoes Boys', 'Shoes', 'Boys', '', '', '', '15-32', '']),
-  pad(['SHOE-G', 'Shoes Girls', 'Shoes', 'Girls', '', '', '', '15-32', '']),
-];
-const ITEM_NOTES = [
-  'T-Print · Items Upload Format',
-  'ఒక item = ఒక row. ఉదాహరణ rows (Items sheet) నిజమైన data వేసే ముందు తొలగించండి.',
-  'Code, Name, Type, SubType తప్పనిసరి. Code unique: ఇదే Code ఉన్న item ఉంటే update అవుతుంది, లేకపోతే కొత్తది add అవుతుంది.',
-  'Type = Catalog → Item Types లోని పేరు. SubType = Common / Boys / Girls.',
-  'ClassFrom, ClassTo (1–12): ఖాళీ = school లోని అన్ని తరగతులు. Semester: 1–4.',
-  'Sizes: S,M,L  లేదా  15-32. N1…N12: ఆ తరగతిలో ప్రతి విద్యార్థికి సంఖ్య (ఖాళీ = 1, 0 = ఇవ్వరు).',
-];
+const pad = (arr) => [...arr, ...Array(Math.max(ITEM_HEADERS.length - arr.length, 0)).fill('')];
+// The template already contains the items currently being distributed (constants/DefaultItems.js).
+// Edit / delete rows in Excel as needed; the same list is the first-run default Item Catalog.
+const ITEM_ROWS = DEFAULT_ITEM_ROWS.map(pad);
 
 export function buildItemsTemplateWorkbook() {
   const wb = utils.book_new();
-  const ws = utils.aoa_to_sheet([ITEM_HEADERS, ...ITEM_SAMPLES]);
+  const ws = utils.aoa_to_sheet([ITEM_HEADERS, ...ITEM_ROWS]);
   ws['!cols'] = ITEM_HEADERS.map((h, i) => ({ wch: i === 1 ? 26 : i < 9 ? 14 : 5 }));
   utils.book_append_sheet(wb, ws, 'Items');                       // data sheet FIRST
-  utils.book_append_sheet(wb, utils.aoa_to_sheet(ITEM_NOTES.map(l => [l])), 'Instructions');
+  const wsNotes = utils.aoa_to_sheet(DEFAULT_ITEM_INSTRUCTIONS);
+  wsNotes['!cols'] = [{ wch: 22 }, { wch: 12 }, { wch: 70 }, { wch: 22 }];
+  utils.book_append_sheet(wb, wsNotes, 'Instructions');
   return wb;
 }
 
@@ -54,7 +44,7 @@ const SCHOOL_SAMPLES = [
   schoolRow('36000000002', 'SAMPLE MPP Primary School', 'PS', 'Sample Village 2', 1, 5, { 1: [8, 7], 2: [9, 6], 3: [7, 8], 4: [10, 9], 5: [6, 7] }),
 ];
 const SCHOOL_NOTES = [
-  'T-Print · Schools Upload Format',
+  'Print · Schools Upload Format',
   'ఒక school = ఒక row. ఉదాహరణ rows (Schools sheet) నిజమైన data వేసే ముందు తొలగించండి.',
   'UDISE, School Name, Type, MinClass, MaxClass తప్పనిసరి. UDISE unique: ఇదే UDISE ఉన్న school ఉంటే update అవుతుంది, లేకపోతే కొత్తది add అవుతుంది.',
   'Type: FS / PS / UPS / HS / HS+. MinClass, MaxClass: 1–12.',
@@ -79,8 +69,8 @@ async function shareWorkbook(wb, fileName, title) {
 }
 
 const TemplateService = {
-  shareItemsTemplate:   () => shareWorkbook(buildItemsTemplateWorkbook(),   'T-Print_Items_Template.xlsx',   'Items Template'),
-  shareSchoolsTemplate: () => shareWorkbook(buildSchoolsTemplateWorkbook(), 'T-Print_Schools_Template.xlsx', 'Schools Template'),
+  shareItemsTemplate:   () => shareWorkbook(buildItemsTemplateWorkbook(),   'Items_Template.xlsx',   'Items Template'),
+  shareSchoolsTemplate: () => shareWorkbook(buildSchoolsTemplateWorkbook(), 'Schools_Template.xlsx', 'Schools Template'),
 };
 
 export default TemplateService;

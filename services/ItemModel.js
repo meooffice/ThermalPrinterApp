@@ -288,3 +288,20 @@ export function itemEmoji(item) {
   for (const [re, em] of EMOJI_RULES) if (re.test(String(item?.category || ''))) return em;
   return '📦';
 }
+
+// ───────────────────────── Semester filter helpers (Stock / Requirement / Reports) ─────────────────────────
+/** Semester of an item as a number (1, 2 ...), or null when the item has none (Kits, Notebooks, Shoes ...) */
+export function itemSemester(item) {
+  const n = parseInt(item && item.semester, 10);
+  return isNaN(n) ? null : n;
+}
+/** Sorted list of the Semesters used by the catalog, e.g. [1, 2] */
+export function semesterList(items) {
+  return [...new Set((items || []).map(itemSemester).filter(n => n !== null))].sort((a, b) => a - b);
+}
+/** sem = null -> everything. Otherwise: items of that Semester, plus items without a Semester (same rule as the Receipt screen). */
+export function semesterMatches(item, sem) {
+  if (sem === null || sem === undefined) return true;
+  const s = itemSemester(item);
+  return s === null || s === sem;
+}

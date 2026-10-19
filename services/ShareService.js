@@ -1,6 +1,7 @@
 // services/ShareService.js
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { APP_VERSION, APP_CREDITS } from '../constants/AppInfo';
 
 // Names may contain & < > — escape them so the PDF layout cannot break
 const esc = (v) => String(v ?? '')
@@ -12,23 +13,104 @@ const sizeText = (sizes) => !sizes || typeof sizes !== 'object' ? '' : Object.ke
   .sort((a, b) => (parseFloat(a) - parseFloat(b)) || a.localeCompare(b))
   .map(s => `${s}x${parseInt(sizes[s], 10)}`).join(', ');
 
+// A4 in points / pixels at 72 PPI
+const A4_W = 595;
+const A4_H = 842;
+
 class ShareService {
 
-  // Build HTML version of the receipt
+  // Build HTML version of the receipt.
+  // Layout: A4 page (595 x 842 px @72 PPI) = two identical A5 halves (top / bottom, dashed cut line).
+  // A long receipt continues on the next page; every page again holds the same part twice.
   buildReceiptHTML({ settings, school, spell, items, totalQty, invoiceNo }) {
     const mandal   = settings?.shopName || 'Mandal';
     const now      = new Date();
     const dateStr  = now.toLocaleDateString();
     const timeStr  = now.toLocaleTimeString();
 
-    const itemRows = items
-      .filter(i => i.name)
-      .map(i => `
-        <tr>
-          <td>${parseInt(i.count || 0, 10) < 0 ? '* ' : ''}${esc(i.name)}${sizeText(i.sizes) ? `<br/><span style="font-size:11px">Size: ${esc(sizeText(i.sizes))}</span>` : ''}</td>
-          <td style="text-align:center">${i.count || 0}</td>
-        </tr>
-      `).join('');
+    const rows = items.filter(i => i.name);
+
+    // One item = 1 line (+1 when it has size-wise counts). Each half shows two columns of items.
+    const PER_COL = 8;                                   // lines per column in one half
+    const weight  = (i) => (sizeText(i.sizes) ? 2 : 1);
+    const chunks  = [];
+    let cur = [], used = 0;
+    rows.forEach(i => {
+      if (used + weight(i) > PER_COL * 2 && cur.length) { chunks.push(cur); cur = []; used = 0; }
+      cur.push(i); used += weight(i);
+    });
+    chunks.push(cur);                                    // last chunk (may be empty when there are no items)
+
+    const itemRow = (i) => `
+      <tr>
+        <td>${parseInt(i.count || 0, 10) < 0 ? '* ' : ''}${esc(i.name)}${sizeText(i.sizes) ? `<br/><span class="sz">Size: ${esc(sizeText(i.sizes))}</span>` : ''}</td>
+        <td class="cnt">${i.count || 0}</td>
+      </tr>`;
+    const itemTable = (list) => `
+      <table class="items">
+        <thead><tr><th>Item</th><th class="cnt">Count</th></tr></thead>
+        <tbody>${list.map(itemRow).join('')}</tbody>
+      </table>`;
+
+    // Split a chunk into left / right columns by line weight
+    const columns = (chunk) => {
+      const total = chunk.reduce((a, i) => a + weight(i), 0);
+      let acc = 0, k = 0;
+      while (k < chunk.length && acc < total / 2) { acc += weight(chunk[k]); k++; }
+      return [chunk.slice(0, k), chunk.slice(k)];
+    };
+
+    const half = (chunk, idx) => {
+      const last = idx === chunks.length - 1;
+      const [left, right] = columns(chunk);
+      return `
+        <div class="half">
+          <div class="head">
+            <div>
+              <div class="h1">SRKVM Kits</div>
+              <div class="h2">${esc(mandal)} Mandal</div>
+            </div>
+            <div class="meta">
+              ${invoiceNo ? `<div><strong>Invoice : ${esc(invoiceNo)}</strong></div>` : ''}
+              <div>Date : ${dateStr} &nbsp; ${timeStr}</div>
+              <div><strong>Spell ${esc(spell)}</strong>${chunks.length > 1 ? ` &nbsp; (${idx + 1}/${chunks.length})` : ''}</div>
+            </div>
+          </div>
+          ${school ? `
+            <div class="school">
+              <strong>${esc(school.name)}</strong>${school.udise ? ` &nbsp; UDISE : ${esc(school.udise)}` : ''}
+              ${school.address ? `<div>${esc(school.address)}</div>` : ''}
+            </div>` : ''}
+          <div class="cols">
+            <div class="col">${left.length ? itemTable(left) : ''}</div>
+            <div class="col">${right.length ? itemTable(right) : ''}</div>
+          </div>
+          ${last ? `
+            <div class="totals">
+              <span>Total Items : <strong>${rows.length}</strong></span>
+              <span>Total Qty : <strong>${totalQty}</strong></span>
+            </div>
+            <div class="sign">
+              <span>Received By :</span>
+              <span>Name : ______________</span>
+              <span>Sign : ______________</span>
+            </div>` : `<div class="cont">… continued on next page</div>`}
+          <div class="foot">
+            <div>${esc(settings?.shopTagline || 'Thank you!')}</div>
+            <div class="rule"></div>
+            <div>${esc(APP_CREDITS)}</div>
+            <div>SRKVM v${esc(APP_VERSION)}</div>
+            <div class="rule"></div>
+          </div>
+        </div>`;
+    };
+
+    const pages = chunks.map((chunk, idx) => `
+      <div class="page">
+        ${half(chunk, idx)}
+        <div class="cut"></div>
+        ${half(chunk, idx)}
+      </div>`).join('');
 
     return `
       <!DOCTYPE html>
@@ -36,114 +118,33 @@ class ShareService {
       <head>
         <meta charset="utf-8"/>
         <style>
-          body {
-            font-family: monospace;
-            max-width: 300px;
-            margin: 0 auto;
-            padding: 16px;
-            font-size: 13px;
-          }
-          h1 {
-            text-align: center;
-            font-size: 18px;
-            margin: 4px 0;
-          }
-          h2 {
-            text-align: center;
-            font-size: 14px;
-            margin: 4px 0;
-            font-weight: normal;
-          }
-          .divider {
-            border-top: 1px dashed #000;
-            margin: 8px 0;
-          }
-          .divider-solid {
-            border-top: 2px solid #000;
-            margin: 8px 0;
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-          }
-          th {
-            text-align: left;
-            border-bottom: 1px solid #000;
-            padding: 4px 0;
-          }
-          td { padding: 3px 0; }
-          .total-row {
-            font-weight: bold;
-            border-top: 1px solid #000;
-            padding-top: 4px;
-          }
-          .footer {
-            text-align: center;
-            margin-top: 12px;
-            font-size: 12px;
-          }
-          .sign-section {
-            margin-top: 16px;
-          }
-          .sign-line {
-            margin: 8px 0;
-          }
+          @page { size: 595px 842px; margin: 0; }
+          * { box-sizing: border-box; }
+          body { margin: 0; padding: 0; font-family: monospace; font-size: 11px; line-height: 14px; color: #000; }
+          .page { width: 595px; height: 842px; page-break-after: always; overflow: hidden; }
+          .page:last-child { page-break-after: auto; }
+          .half { height: 420px; padding: 16px 20px 10px 20px; overflow: hidden; position: relative; }
+          .cut  { height: 2px; border-top: 1px dashed #666; }
+          .head { display: flex; flex-direction: row; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #000; padding-bottom: 6px; }
+          .h1   { font-size: 18px; line-height: 22px; font-weight: bold; }
+          .h2   { font-size: 12px; }
+          .meta { text-align: right; }
+          .school { padding: 6px 0; border-bottom: 1px dashed #000; }
+          .cols { display: flex; flex-direction: row; gap: 16px; padding-top: 6px; }
+          .col  { flex: 1; }
+          table.items { width: 100%; border-collapse: collapse; }
+          table.items th { text-align: left; border-bottom: 1px solid #000; padding: 2px 0; }
+          table.items td { padding: 1px 0; vertical-align: top; }
+          .cnt  { text-align: center; width: 44px; }
+          .sz   { font-size: 10px; }
+          .totals { display: flex; flex-direction: row; justify-content: space-between; border-top: 1px solid #000; margin-top: 8px; padding-top: 4px; font-size: 12px; }
+          .sign { display: flex; flex-direction: row; justify-content: space-between; margin-top: 18px; }
+          .cont { margin-top: 8px; text-align: center; font-style: italic; }
+          .foot { position: absolute; left: 20px; right: 20px; bottom: 6px; text-align: center; font-size: 10px; line-height: 13px; }
+          .rule { border-top: 1px dashed #000; margin: 2px 0; }
         </style>
       </head>
-      <body>
-        <h1>SRKVM Kits</h1>
-        <h2>${esc(mandal)} Mandal</h2>
-        <div class="divider-solid"></div>
-
-        ${invoiceNo ? `<div><strong>Invoice : ${esc(invoiceNo)}</strong></div>` : ''}
-        <div>Date : ${dateStr}</div>
-        <div>Time : ${timeStr}</div>
-        <div><strong>Spell: Spell ${spell}</strong></div>
-        <div class="divider"></div>
-
-        ${school ? `
-          <div><strong>School:</strong></div>
-          <div>${esc(school.name)}</div>
-          ${school.udise ? `<div>UDISE : ${esc(school.udise)}</div>` : ''}
-          ${school.address ? `<div>${esc(school.address)}</div>` : ''}
-          <div class="divider"></div>
-        ` : ''}
-
-        <table>
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th style="text-align:center">Count</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${itemRows}
-          </tbody>
-          <tfoot>
-            <tr class="total-row">
-              <td>Total Items</td>
-              <td style="text-align:center">
-                ${items.filter(i => i.name).length}
-              </td>
-            </tr>
-            <tr class="total-row">
-              <td>Total Qty</td>
-              <td style="text-align:center">${totalQty}</td>
-            </tr>
-          </tfoot>
-        </table>
-
-        <div class="divider-solid"></div>
-
-        <div class="sign-section">
-          <div class="sign-line">Received By:</div>
-          <div class="sign-line">Name : ____________________</div>
-          <div class="sign-line">Sign : ____________________</div>
-        </div>
-
-        <div class="divider-solid"></div>
-        <div class="footer">${esc(settings?.shopTagline || 'Thank you!')}</div>
-      </body>
+      <body>${pages}</body>
       </html>
     `;
   }
@@ -151,7 +152,7 @@ class ShareService {
   // Generate PDF and share it
   async sharePDF(receiptData) {
     const html  = this.buildReceiptHTML(receiptData);
-    const { uri } = await Print.printToFileAsync({ html, width: 300 });
+    const { uri } = await Print.printToFileAsync({ html, width: A4_W, height: A4_H });
     await Sharing.shareAsync(uri, {
       mimeType: 'application/pdf',
       dialogTitle: 'Share Receipt PDF',
@@ -162,7 +163,7 @@ class ShareService {
   // Print to system printer (other apps)
   async printViaSystem(receiptData) {
     const html = this.buildReceiptHTML(receiptData);
-    await Print.printAsync({ html, width: 300 });
+    await Print.printAsync({ html, width: A4_W, height: A4_H });
   }
 }
 

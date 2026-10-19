@@ -5,13 +5,15 @@ import {
 } from 'react-native';
 import { CommonActions } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Colors } from '../constants/Theme';
 
 // root = first screen of the tab's own stack (App.js: HomeStack, SettingsStack)
 const TABS = [
-  { name: 'Home',    icon: '🏠', label: 'Home',     root: 'HomeMain'     },
-  { name: 'Receipt', icon: '🧾', label: 'Receipt'  },
-  { name: 'History', icon: '📋', label: 'History'  },
-  { name: 'Settings',icon: '⚙️', label: 'Settings', root: 'SettingsMain' },
+  { name: 'Home',    icon: 'home-variant',          label: 'Home',     root: 'HomeMain'     },
+  { name: 'Receipt', icon: 'receipt-text',          label: 'Receipt'  },
+  { name: 'History', icon: 'clipboard-text-clock',  label: 'History'  },
+  { name: 'Settings',icon: 'cog',                   label: 'Settings', root: 'SettingsMain' },
 ];
 
 export default function FloatingTabBar({ state, navigation }) {
@@ -41,7 +43,11 @@ export default function FloatingTabBar({ state, navigation }) {
               onPress={() => handlePress(tab, index)}
               activeOpacity={0.8}
             >
-              <Text style={styles.icon}>{tab.icon}</Text>
+              <MaterialCommunityIcons
+                name={isFocused ? tab.icon : `${tab.icon}-outline`}
+                size={22}
+                color={isFocused ? '#ffffff' : Colors.navInactive}
+              />
               <Text style={[
                 styles.label,
                 isFocused ? styles.labelActive : styles.labelInactive
@@ -66,41 +72,40 @@ const styles = StyleSheet.create({
   },
   container: {
     flexDirection:   'row',
-    backgroundColor: '#1e1b4b',
-    borderRadius:    28,
-    paddingVertical: 10,
+    backgroundColor: Colors.surface,
+    borderRadius:    30,
+    paddingVertical: 8,
     paddingHorizontal: 8,
     width:           '100%',
     justifyContent:  'space-around',
     alignItems:      'center',
-    elevation:       8,
-    shadowColor:     '#000',
-    shadowOffset:    { width: 0, height: 4 },
-    shadowOpacity:   0.3,
-    shadowRadius:    8,
+    borderWidth:     0.5,
+    borderColor:     Colors.cardBorder,
+    elevation:       10,
+    shadowColor:     Colors.primaryDark,
+    shadowOffset:    { width: 0, height: 6 },
+    shadowOpacity:   0.18,
+    shadowRadius:    14,
   },
   tab: {
     alignItems:      'center',
     justifyContent:  'center',
-    paddingVertical:  6,
-    paddingHorizontal: 14,
-    borderRadius:    20,
+    paddingVertical:  7,
+    paddingHorizontal: 16,
+    borderRadius:    22,
     gap:              2,
   },
   tabActive: {
-    backgroundColor: '#4f46e5',
-  },
-  icon: {
-    fontSize: 16,
+    backgroundColor: Colors.primary,
   },
   label: {
-    fontSize:   9,
-    fontWeight: '600',
+    fontSize:   10,
+    fontWeight: '700',
   },
   labelActive: {
     color: '#ffffff',
   },
   labelInactive: {
-    color: '#a5b4fc',
+    color: Colors.navInactive,
   },
 });

@@ -1,4 +1,4 @@
-# T-Print (SRKVM Kit Distribution)
+# (SRKVM Kit Distribution)
 
 Offline Android app (Expo SDK 54, React Native 0.81.5, JavaScript) for kit distribution at mandal level:
 schools, item catalog, stock, receipts, reports, and 58 mm thermal printing (Bluetooth Classic, ESC/POS).
@@ -55,7 +55,7 @@ Upload the UDISE+ "Enrolment Details" Excel directly (the app detects it: title 
 - Schools missing from the file are left untouched.
 
 ## Google Drive auto backup (Settings -> Backup & Restore)
-- Switch on: Google account is chosen once (silent sign-in later). The backup is ONE file `tprint-backup-latest.json`
+- Switch on: Google account is chosen once (silent sign-in later). The backup is ONE file `srkvm-backup-latest.json`
   in the app's hidden Drive folder (`appDataFolder`, scope `drive.appdata`); every backup overwrites it.
 - When: after 7 PM each day. The app checks on start, on returning to foreground and every 5 minutes while open;
   a backup runs if no backup was made since the last 7 PM. After a failure it retries after 30 minutes.

@@ -4,6 +4,7 @@
 // without changing the layout; nothing is sent to the printer here (BluetoothService does that).
 import { unzlibSync } from 'fflate';
 import EscPosEncoder from './EscPosEncoder';
+import { APP_VERSION, APP_CREDITS } from '../constants/AppInfo';
 
 // Target print width in dots (fits both 58mm and 80mm paper)
 const LOGO_PRINT_WIDTH = 100;  // reduced — logo sits left of SRKVM text
@@ -162,6 +163,19 @@ async function loadLogo() {
 }
 
 export { loadLogo };
+
+/**
+ * Last lines of every receipt (between two dividers): credits (split at the comma when wider than the paper) + version.
+ */
+export function footerLines(width) {
+  const out = [];
+  const k = APP_CREDITS.indexOf(', ');
+  if (APP_CREDITS.length <= width) out.push(APP_CREDITS);
+  else if (k > 0 && k < width && APP_CREDITS.length - k - 2 <= width) out.push(APP_CREDITS.slice(0, k + 1), APP_CREDITS.slice(k + 2));
+  else out.push(APP_CREDITS);
+  out.push(`SRKVM v${APP_VERSION}`);
+  return out;
+}
 
 /**
  * Extra text lines for an item given size-wise (item.sizes = { '20': 3, '21': -1 }), wrapped to the paper width:
@@ -335,6 +349,9 @@ export async function buildReceiptBase64({ settings, school, spell, items, invoi
     .divider('=', width)
     .align('center')
     .text(settings?.shopTagline || 'Thank you!').newline()
+    .divider('-', width);
+  footerLines(width).forEach(l => encoder.text(l).newline());
+  encoder.divider('-', width)
     .newline(3).cut();
 
   return encoder.encodeBase64();
@@ -395,5 +412,8 @@ export function buildReceiptPreview({ settings, school, spell, items, invoiceNo,
   add('Sign : ____________________');
   div('=');
   add(settings?.shopTagline || 'Thank you!', { center: true });
+  div('-');
+  footerLines(width).forEach(l => add(l, { center: true }));
+  div('-');
   return L;
 }

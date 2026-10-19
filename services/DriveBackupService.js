@@ -1,16 +1,20 @@
 // services/DriveBackupService.js
-// Automatic backup to the user's Google Drive (hidden appDataFolder, ONE file that is overwritten = "latest only").
+// Automatic backup to the user's Google Drive (hidden appDataFolder). Every backup is a NEW dated file; the newest
+// KEEP_VERSIONS are kept, older ones are deleted. (The old single 'srkvm-backup-latest.json' is just treated as the oldest version.)
 // Reuses BackupService.buildPayload / inspect / restore. Never touches existing app data keys.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import BackupService from './BackupService';
+import BackupReminder from './BackupReminder';
 
 // 👉 Google Cloud Console లో create చేసిన "Web application" OAuth Client ID ఇక్కడ పెట్టండి
 export const WEB_CLIENT_ID = '378761747962-tc6m4cnonmun1ecfinsvo07jtkb09jb0.apps.googleusercontent.com';
 
 const META_KEY    = 'drive_backup_meta';            // not included in Backup (not in BackupService key list)
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
-const FILE_NAME   = 'tprint-backup-latest.json';
+const FILE_PREFIX = 'srkvm-backup-';                // old file: srkvm-backup-latest.json, new files: srkvm-backup-20261016-190000.json
+const FILE_RE     = /^srkvm-backup-.*\.json$/;
+const KEEP_VERSIONS = 15;                           // newest backups kept in Drive
 const API         = 'https://www.googleapis.com/drive/v3';
 const UPLOAD_API  = 'https://www.googleapis.com/upload/drive/v3';
 const BACKUP_HOUR = 19;                             // 7 PM
@@ -105,46 +109,78 @@ class DriveBackupService {
     return res;
   }
 
-  // ── Drive file ────────────────────────────────────────────────────
-  async _findFile() {
-    const q = encodeURIComponent(`name='${FILE_NAME}' and trashed=false`);
-    const res = await this._fetch(`${API}/files?spaces=appDataFolder&q=${q}&fields=files(id,modifiedTime)&orderBy=modifiedTime desc&pageSize=1`);
+  // ── Drive files ───────────────────────────────────────────────────
+  // All backup files of this app, newest first: [{ id, name, modifiedTime, size }]
+  async _listFiles() {
+    const q = encodeURIComponent('trashed=false');
+    const res = await this._fetch(`${API}/files?spaces=appDataFolder&q=${q}&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime desc&pageSize=100`);
     const j = await res.json();
-    return (j.files && j.files[0]) || null;
+    return (j.files || []).filter(f => FILE_RE.test(f.name || ''));
   }
 
-  // Info about the backup currently in Drive (null = none)
+  // Newest backup file (null = none)
+  async _findFile() {
+    const list = await this._listFiles();
+    return list[0] || null;
+  }
+
+  // Info about the newest backup currently in Drive (null = none)
   async remoteInfo() {
     const f = await this._findFile();
     return f ? { id: f.id, modifiedTime: f.modifiedTime } : null;
   }
 
+  // Backup history for the Restore list (newest first): [{ id, name, modifiedTime, size }]
+  async listBackups() {
+    return this._listFiles();
+  }
+
+  // Always a NEW file, so an earlier backup is never overwritten
   async _upload(payloadText) {
-    const existing = await this._findFile();
-    const boundary = 'tprint' + Date.now();
-    const meta = existing ? { name: FILE_NAME } : { name: FILE_NAME, parents: ['appDataFolder'] };
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    const name = `${FILE_PREFIX}${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.json`;
+    const boundary = 'srkvm' + Date.now();
+    const meta = { name, parents: ['appDataFolder'] };
     const body =
       `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n` +
       `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${payloadText}\r\n` +
       `--${boundary}--`;
-    const url = existing
-      ? `${UPLOAD_API}/files/${existing.id}?uploadType=multipart`
-      : `${UPLOAD_API}/files?uploadType=multipart`;
-    await this._fetch(url, {
-      method: existing ? 'PATCH' : 'POST',
+    await this._fetch(`${UPLOAD_API}/files?uploadType=multipart`, {
+      method: 'POST',
       headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
       body,
     });
   }
 
-  // Download backup from Drive → { payload, summary, exportedAt } (validated, same shape as pickBackup)
-  async downloadBackup() {
-    const f = await this._findFile();
+  // Delete the oldest backups beyond KEEP_VERSIONS. A failure here never fails the backup itself.
+  async _prune() {
+    try {
+      const list = await this._listFiles();
+      for (const f of list.slice(KEEP_VERSIONS)) {
+        await this._fetch(`${API}/files/${f.id}`, { method: 'DELETE' });
+      }
+    } catch { /* ignore: next backup tries again */ }
+  }
+
+  // Download a backup from Drive (fileId = a chosen version, default = newest)
+  // -> { payload, summary, exportedAt } (validated, same shape as pickBackup)
+  async downloadBackup(fileId) {
+    const f = fileId ? { id: fileId } : await this._findFile();
     if (!f) throw new Error('Drive లో backup లేదు.');
     const res = await this._fetch(`${API}/files/${f.id}?alt=media`);
     const payload = parseJSON(await res.text());
     if (payload === undefined) throw new Error('Drive file చదవలేకపోయాను.');
     return BackupService.inspect(payload);
+  }
+
+  // Before restoring an older version: save the CURRENT data as a new Drive version too (nothing to save = skipped).
+  // Returns true if saved, false if there was no data. Throws if the upload failed.
+  async backupBeforeRestore() {
+    const payload = await BackupService.buildPayload();
+    if (Object.keys(payload.data).length === 0) return false;
+    await this.backupNow();
+    return true;
   }
 
   // ── Backup now ────────────────────────────────────────────────────
@@ -160,8 +196,10 @@ class DriveBackupService {
         }
         const { summary } = BackupService.inspect(payload); // same validation as manual backup
         await this._upload(JSON.stringify(payload));
+        await this._prune();
         const at = new Date().toISOString();
         await this.setMeta({ lastBackupAt: at, lastError: null });
+        BackupReminder.onBackedUp(at); // today's 7 PM reminder is not needed any more
         return { summary, at };
       } catch (e) {
         await this.setMeta({ lastError: e.message || String(e) });

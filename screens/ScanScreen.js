@@ -5,11 +5,22 @@ import {
   Alert, StyleSheet, PermissionsAndroid, Platform,  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import BluetoothService from '../services/BluetoothService';
 import { isPrinterDevice } from '../services/PrinterFilter';
 import { Colors, Radius, Spacing, Typography } from '../constants/Theme'; 
 import { ScreenHeader, Card, ConnectedChip } from '../components/ui';
 import { NativeModules, TurboModuleRegistry } from 'react-native';
+
+// Section heading with an icon (display only)
+function SectionHead({ icon, label }) {
+  return (
+    <View style={styles.sectionRow}>
+      <MaterialCommunityIcons name={icon} size={16} color={Colors.primary} />
+      <Text style={styles.sectionTitle}>{label}</Text>
+    </View>
+  );
+}
 
 export default function ScanScreen({ navigation }) {
   const [pairedDevices, setPairedDevices] = useState([]);
@@ -63,10 +74,10 @@ export default function ScanScreen({ navigation }) {
     try {
       setConnecting(device.address);
       await BluetoothService.connect(device);
-      Alert.alert('✅ Connected!', `${device.name} కి connect అయింది`, [
+      Alert.alert('Connected', `${device.name} కి connect అయింది`, [
         { text: 'Go Home', onPress: () => navigation.navigate('HomeMain') },
       ]);
-    } catch (error) { Alert.alert('❌ Failed', error.message); }
+    } catch (error) { Alert.alert('Failed', error.message); }
     finally { setConnecting(null); }
   };
 
@@ -84,15 +95,21 @@ export default function ScanScreen({ navigation }) {
       activeOpacity={0.8}
     >
       <View style={styles.deviceIcon}>
-        <Text style={{ fontSize: 22 }}>🖨️</Text>
+        <MaterialCommunityIcons name="printer" size={24} color={Colors.primary} />
       </View>
       <View style={styles.deviceInfo}>
         <Text style={styles.deviceName}>{item.name || 'Unknown Device'}</Text>
-        <Text style={styles.deviceAddress}>📶 {item.address}</Text>
+        <View style={styles.deviceRow}>
+          <MaterialCommunityIcons name="bluetooth" size={12} color={Colors.textMuted} />
+          <Text style={styles.deviceAddress}>{item.address}</Text>
+        </View>
         {showAll && item.deviceClass ? (
-          <Text style={styles.deviceAddress}>
-            {isPrinterDevice(item) ? '🖨️ printer' : '📱 ఇతర'} · class {item.deviceClass.majorClass}/{item.deviceClass.deviceClass}
-          </Text>
+          <View style={styles.deviceRow}>
+            <MaterialCommunityIcons name={isPrinterDevice(item) ? 'printer' : 'cellphone'} size={12} color={Colors.textMuted} />
+            <Text style={styles.deviceAddress}>
+              {isPrinterDevice(item) ? 'printer' : 'ఇతర'} · class {item.deviceClass.majorClass}/{item.deviceClass.deviceClass}
+            </Text>
+          </View>
         ) : null}
       </View>
       {connecting === item.address ? (
@@ -123,11 +140,11 @@ export default function ScanScreen({ navigation }) {
         </TouchableOpacity>
 
         {/* ── Paired Devices ── */}
-        <Text style={styles.sectionTitle}>🔗  Paired Devices</Text>
+        <SectionHead icon="link-variant" label="Paired Devices" />
         {visiblePaired.length === 0 ? (
           // ui.js → Card
           <Card style={styles.emptyCard}>
-            <Text style={styles.emptyIcon}>📵</Text>
+            <MaterialCommunityIcons name="bluetooth-off" size={36} color={Colors.textMuted} />
             <Text style={styles.emptyText}>Paired devices లేవు</Text>
             <Text style={styles.emptyHint}>Phone Settings లో printer pair చేయండి</Text>
           </Card>
@@ -143,8 +160,9 @@ export default function ScanScreen({ navigation }) {
         {/* ── Printers only / all devices toggle ── */}
         {(hiddenCount > 0 || showAll) && (
           <TouchableOpacity style={styles.filterToggle} onPress={() => setShowAll(v => !v)}>
+            <MaterialCommunityIcons name={showAll ? 'printer' : 'cellphone'} size={15} color={Colors.primary} />
             <Text style={styles.filterToggleText}>
-              {showAll ? '🖨️  Printers మాత్రమే చూపించు' : `📱  ఇతర devices (${hiddenCount}) కూడా చూపించు`}
+              {showAll ? 'Printers మాత్రమే చూపించు' : `ఇతర devices (${hiddenCount}) కూడా చూపించు`}
             </Text>
           </TouchableOpacity>
         )}
@@ -163,7 +181,7 @@ export default function ScanScreen({ navigation }) {
             </View>
           ) : (
             <View style={styles.scanBtnContent}>
-              <Text style={styles.scanBtnIcon}>📡</Text>
+              <MaterialCommunityIcons name="radar" size={20} color={Colors.primaryText} />
               <Text style={styles.scanBtnText}>Scan for New Devices</Text>
             </View>
           )}
@@ -172,7 +190,7 @@ export default function ScanScreen({ navigation }) {
         {/* ── Nearby Devices ── */}
         {visibleNearby.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>📡  Nearby Devices</Text>
+            <SectionHead icon="radar" label="Nearby Devices" />
             <FlatList
               data={visibleNearby}
               keyExtractor={item => item.address}
@@ -183,15 +201,15 @@ export default function ScanScreen({ navigation }) {
         )}
 
         {/* ── Tips ── ui.js → Card ── */}
-        <Text style={styles.sectionTitle}>💡  Tips</Text>
+        <SectionHead icon="lightbulb-on-outline" label="Tips" />
         <Card style={styles.hintCard}>
           {[
-            { icon: '🔌', text: 'Printer on చేయండి' },
-            { icon: '📱', text: 'Phone Bluetooth on చేయండి' },
-            { icon: '🔍', text: '"EC58" లేదా "BT Printer" పేరు కోసం చూడండి' },
+            { icon: 'power-plug-outline', text: 'Printer on చేయండి' },
+            { icon: 'bluetooth', text: 'Phone Bluetooth on చేయండి' },
+            { icon: 'magnify', text: '"EC58" లేదా "BT Printer" పేరు కోసం చూడండి' },
           ].map((tip, idx) => (
             <View key={idx} style={styles.tipRow}>
-              <Text style={styles.tipIcon}>{tip.icon}</Text>
+              <MaterialCommunityIcons name={tip.icon} size={18} color={Colors.accent} style={styles.tipIcon} />
               <Text style={styles.tipText}>{tip.text}</Text>
             </View>
           ))}
@@ -211,7 +229,8 @@ const styles = StyleSheet.create({
   backBtn:     { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.xs },
   backBtnText: { fontSize: 16, color: Colors.primary, fontWeight: '600' },
 
-  sectionTitle: { ...Typography.label, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: Spacing.xs },
+  sectionRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: Spacing.sm },
+  sectionTitle: { ...Typography.label, textTransform: 'uppercase', letterSpacing: 0.8, color: Colors.primaryDark, fontWeight: '700' },
 
   // Device card
   deviceCard: {
@@ -229,34 +248,33 @@ const styles = StyleSheet.create({
   deviceIcon:    { width: 44, height: 44, backgroundColor: Colors.primaryLight, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
   deviceInfo:    { flex: 1 },
   deviceName:    { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
-  deviceAddress: { fontSize: 11, color: Colors.textMuted, marginTop: 2 },
-  filterToggle:     { alignSelf: 'flex-start' },
+  deviceRow:     { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
+  deviceAddress: { fontSize: 11, color: Colors.textMuted },
+  filterToggle:     { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6 },
   filterToggleText: { fontSize: 12, color: Colors.primary, fontWeight: '700' },
   connectBadge:  { backgroundColor: Colors.primaryLight, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: Radius.full },
   connectBadgeText: { color: Colors.primary, fontWeight: '700', fontSize: 12 },
 
   // Empty card
   emptyCard: { alignItems: 'center', gap: Spacing.xs },
-  emptyIcon: { fontSize: 36 },
   emptyText: { fontSize: 14, fontWeight: '600', color: Colors.textPrimary },
   emptyHint: { ...Typography.bodySm, textAlign: 'center' },
 
   // Scan button
   scanBtn: {
     backgroundColor: Colors.primary,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.xl,
     padding: Spacing.md,
     alignItems: 'center',
     elevation: 2,
   },
-  scanBtnDisabled: { backgroundColor: '#a5b4fc' },
+  scanBtnDisabled: { backgroundColor: '#9DB89F' },
   scanBtnContent:  { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  scanBtnIcon:     { fontSize: 20 },
   scanBtnText:     { color: Colors.primaryText, fontWeight: '700', fontSize: 15 },
 
   // Hint card
   hintCard: { gap: Spacing.sm },
   tipRow:   { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  tipIcon:  { fontSize: 16, width: 24, textAlign: 'center' },
+  tipIcon:  { width: 24, textAlign: 'center' },
   tipText:  { fontSize: 13, color: Colors.textAccent, flex: 1 },
 });

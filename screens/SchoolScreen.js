@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { read, utils } from 'xlsx';
@@ -23,6 +24,16 @@ import { Card } from '../components/ui';
 import Hero from '../components/Hero';
 
 const EMPTY_FORM = { name: '', udise: '', address: '', type: '', minClass: '', maxClass: '', roll: {} };
+
+// Small icon + text row (display only)
+function IconText({ icon, size = 12, color = Colors.textMuted, style, children }) {
+  return (
+    <View style={styles.iconText}>
+      <MaterialCommunityIcons name={icon} size={size} color={color} />
+      <Text style={[style, { flexShrink: 1 }]}>{children}</Text>
+    </View>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -261,11 +272,11 @@ export default function SchoolScreen({ navigation }) {
       const skipped = previewRows.length - ok.length;
       await loadSchools();
       Alert.alert(
-        'Upload Complete ✅',
+        'Upload Complete',
         `${added} కొత్త schools add, ${updated} schools update అయ్యాయి.${skipped ? `\n${skipped} rows లో తప్పులు ఉన్నాయి, అవి skip అయ్యాయి.` : ''}`,
       );
     } catch (err) {
-      Alert.alert('❌ Import Failed', err.message);
+      Alert.alert('Import Failed', err.message);
     } finally {
       setUploading(false);
     }
@@ -289,36 +300,36 @@ export default function SchoolScreen({ navigation }) {
     <Card style={styles.schoolCard}>
       <View style={styles.cardLeft}>
         <View style={styles.schoolIcon}>
-          <Text style={{ fontSize: 22 }}>🏫</Text>
+          <MaterialCommunityIcons name="school-outline" size={24} color={Colors.primary} />
         </View>
         <View style={styles.schoolInfo}>
           <Text style={styles.schoolName}>{item.name}</Text>
           {item.udise ? (
             <View style={styles.udiseBadge}>
-              <Text style={styles.udiseText}>📋 UDISE: {item.udise}</Text>
+              <IconText icon="identifier" color={Colors.primary} style={styles.udiseText}>UDISE: {item.udise}</IconText>
             </View>
           ) : null}
-          {item.address ? <Text style={styles.addressText}>📍 {item.address}</Text> : null}
+          {item.address ? <IconText icon="map-marker-outline" style={styles.addressText}>{item.address}</IconText> : null}
           {item.type || item.minClass ? (
-            <Text style={styles.addressText}>
-              🏷️ {item.type || '—'}{item.minClass ? `  ·  🎓 తరగతులు ${item.minClass}–${item.maxClass}` : ''}
-            </Text>
+            <IconText icon="tag-outline" style={styles.addressText}>
+              {item.type || '—'}{item.minClass ? `  ·  తరగతులు ${item.minClass}–${item.maxClass}` : ''}
+            </IconText>
           ) : null}
           {(() => {
             const r = rollSummary(item);
             return r.total > 0
-              ? <Text style={styles.itemCount}>👦 {r.boys} · 👧 {r.girls} · మొత్తం {r.total}</Text>
-              : <Text style={styles.rollWarn}>⚠️ Roll నమోదు చేయండి</Text>;
+              ? <IconText icon="human-male-female" size={13} color={Colors.primary} style={styles.itemCount}>Boys {r.boys} · Girls {r.girls} · మొత్తం {r.total}</IconText>
+              : <IconText icon="alert-outline" size={13} color={Colors.danger} style={styles.rollWarn}>Roll నమోదు చేయండి</IconText>;
           })()}
-          <Text style={styles.itemCount}>📦 {item.items?.length || 0} kit items saved</Text>
+          <IconText icon="package-variant-closed" size={13} color={Colors.primary} style={styles.itemCount}>{item.items?.length || 0} kit items saved</IconText>
         </View>
       </View>
       <View style={styles.cardActions}>
         <TouchableOpacity style={styles.editBtn} onPress={() => openEdit(item)}>
-          <Text style={{ fontSize: 16 }}>✏️</Text>
+          <MaterialCommunityIcons name="pencil-outline" size={18} color={Colors.primary} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item.id)}>
-          <Text style={{ fontSize: 16 }}>🗑️</Text>
+          <MaterialCommunityIcons name="trash-can-outline" size={18} color={Colors.danger} />
         </TouchableOpacity>
       </View>
     </Card>
@@ -355,12 +366,17 @@ export default function SchoolScreen({ navigation }) {
             >
               {uploading
                 ? <ActivityIndicator size="small" color={Colors.primary} />
-                : <Text style={styles.uploadBtnText}>📂  Upload</Text>
+                : (
+                  <>
+                    <MaterialCommunityIcons name="folder-upload-outline" size={16} color={Colors.primary} />
+                    <Text style={styles.uploadBtnText}>Upload</Text>
+                  </>
+                )
               }
             </TouchableOpacity>
             {/* Add button */}
             <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
-              <Text style={styles.addBtnIcon}>＋</Text>
+              <MaterialCommunityIcons name="plus" size={16} color={Colors.primaryText} />
               <Text style={styles.addBtnText}>Add School</Text>
             </TouchableOpacity>
           </View>
@@ -368,18 +384,23 @@ export default function SchoolScreen({ navigation }) {
 
         {/* Format hint */}
         <Text style={styles.uploadHint}>
-          📄 CSV / Excel upload · Columns: UDISE, School Name, Type, Address, MinClass, MaxClass, C1_B, C1_G … C12_G
+          CSV / Excel upload · Columns: UDISE, School Name, Type, Address, MinClass, MaxClass, C1_B, C1_G … C12_G
           · UDISE+ Enrolment Excel నేరుగా upload చేస్తే Roll update అవుతుంది
         </Text>
         <TouchableOpacity style={styles.tplLink} onPress={handleTemplate} disabled={templateBusy}>
           {templateBusy
             ? <ActivityIndicator size="small" color={Colors.primary} />
-            : <Text style={styles.tplLinkText}>📥  Excel Template Download</Text>}
+            : (
+              <>
+                <MaterialCommunityIcons name="file-download-outline" size={16} color={Colors.primary} />
+                <Text style={styles.tplLinkText}>Excel Template Download</Text>
+              </>
+            )}
         </TouchableOpacity>
 
         {/* Search */}
         <View style={styles.searchBox}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <MaterialCommunityIcons name="magnify" size={20} color={Colors.textMuted} />
           <TextInput
             style={styles.searchInput}
             placeholder="Search by name or UDISE..."
@@ -389,7 +410,7 @@ export default function SchoolScreen({ navigation }) {
           />
           {search.length > 0 && (
             <TouchableOpacity onPress={() => setSearch('')}>
-              <Text style={{ fontSize: 16, color: Colors.textMuted }}>✕</Text>
+              <MaterialCommunityIcons name="close-circle" size={18} color={Colors.textMuted} />
             </TouchableOpacity>
           )}
         </View>
@@ -397,9 +418,9 @@ export default function SchoolScreen({ navigation }) {
         {/* List */}
         {filtered.length === 0 ? (
           <View style={styles.centered}>
-            <Text style={styles.emptyEmoji}>🏫</Text>
+            <MaterialCommunityIcons name="school-outline" size={52} color={Colors.accent} style={styles.emptyIcon} />
             <Text style={styles.emptyTitle}>No schools yet</Text>
-            <Text style={styles.emptyHint}>+ Add School లేదా 📂 Upload తో add చేయండి</Text>
+            <Text style={styles.emptyHint}>+ Add School లేదా Upload తో add చేయండి</Text>
           </View>
         ) : (
           <FlatList
@@ -427,9 +448,10 @@ export default function SchoolScreen({ navigation }) {
           />
           <View style={[styles.modalSheet, styles.modalSheetTall, { paddingBottom: Spacing.lg + insets.bottom }]}>
             <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>
-              {editSchool ? '✏️  Edit School' : '🏫  Add School'}
-            </Text>
+            <View style={styles.modalTitleRow}>
+              <MaterialCommunityIcons name={editSchool ? 'pencil-outline' : 'school-outline'} size={22} color={Colors.primaryDark} />
+              <Text style={styles.modalTitle}>{editSchool ? 'Edit School' : 'Add School'}</Text>
+            </View>
             <ScrollView style={styles.sheetScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <Text style={styles.inputLabel}>School Name *</Text>
               <TextInput
@@ -501,8 +523,14 @@ export default function SchoolScreen({ navigation }) {
                 <View style={styles.rollPanel}>
                   <View style={styles.rollRow}>
                     <Text style={[styles.rollClass, styles.rollHeadText]}>తరగతి</Text>
-                    <Text style={[styles.rollHeadCell, styles.rollHeadText]}>👦 Boys</Text>
-                    <Text style={[styles.rollHeadCell, styles.rollHeadText]}>👧 Girls</Text>
+                    <View style={styles.rollHeadBox}>
+                      <MaterialCommunityIcons name="human-male" size={14} color={Colors.textSecondary} />
+                      <Text style={styles.rollHeadText}>Boys</Text>
+                    </View>
+                    <View style={styles.rollHeadBox}>
+                      <MaterialCommunityIcons name="human-female" size={14} color={Colors.textSecondary} />
+                      <Text style={styles.rollHeadText}>Girls</Text>
+                    </View>
                   </View>
                   {rollClasses.map(cl => (
                     <View key={cl} style={styles.rollRow}>
@@ -523,7 +551,7 @@ export default function SchoolScreen({ navigation }) {
                       />
                     </View>
                   ))}
-                  <Text style={styles.rollTotal}>👦 {formBoys} · 👧 {formGirls} · మొత్తం {formBoys + formGirls}</Text>
+                  <Text style={styles.rollTotal}>Boys {formBoys} · Girls {formGirls} · మొత్తం {formBoys + formGirls}</Text>
                 </View>
               ) : (
                 <Text style={styles.rollInfo}>Roll నమోదు చేయడానికి ముందు Min–Max తరగతులు ఇవ్వండి.</Text>
@@ -534,7 +562,7 @@ export default function SchoolScreen({ navigation }) {
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-                <Text style={styles.saveBtnText}>{editSchool ? '✅  Update' : '➕  Add School'}</Text>
+                <Text style={styles.saveBtnText}>{editSchool ? 'Update' : 'Add School'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -556,23 +584,24 @@ export default function SchoolScreen({ navigation }) {
           />
           <View style={[styles.modalSheet, { height: '80%' }, { paddingBottom: Spacing.lg + insets.bottom }]}>
             <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>
-              📋  Preview — {previewRows?.length} rows
-            </Text>
+            <View style={styles.modalTitleRow}>
+              <MaterialCommunityIcons name="clipboard-list-outline" size={22} color={Colors.primaryDark} />
+              <Text style={styles.modalTitle}>Preview — {previewRows?.length} rows</Text>
+            </View>
             <Text style={styles.previewHint}>
               దిగువ schools add / update అవుతాయి. ఎరుపు rows (తప్పులు) skip అవుతాయి.
             </Text>
 
             {udiseNote ? (
               <Text style={styles.previewHint}>
-                📥 UDISE+ file{udiseNote.ay ? ` (AY ${udiseNote.ay})` : ''} · Roll update (పేర్లు, items, address మారవు)
+                UDISE+ file{udiseNote.ay ? ` (AY ${udiseNote.ay})` : ''} · Roll update (పేర్లు, items, address మారవు)
                 {udiseNote.unchanged ? `\nమార్పు లేనివి: ${udiseNote.unchanged}` : ''}
                 {udiseNote.missing ? `\nFile లో లేని schools (మార్పు లేదు): ${udiseNote.missing}` : ''}
-                {udiseNote.ayMismatch ? `\n⚠️ File AY ${udiseNote.ay}, App AY ${udiseNote.ayMismatch}` : ''}
+                {udiseNote.ayMismatch ? `\nహెచ్చరిక: File AY ${udiseNote.ay}, App AY ${udiseNote.ayMismatch}` : ''}
               </Text>
             ) : null}
             <Text style={styles.previewSummary}>
-              🆕 కొత్తవి {pvNew}  ·  🔄 Update {pvUpd}  ·  ❌ తప్పులు {pvErr}
+              కొత్తవి {pvNew}  ·  Update {pvUpd}  ·  తప్పులు {pvErr}
             </Text>
 
             <View style={[styles.modalActions, { marginTop: 0, marginBottom: Spacing.sm }]}>
@@ -584,7 +613,7 @@ export default function SchoolScreen({ navigation }) {
                 onPress={confirmUpload}
                 disabled={pvNew + pvUpd === 0}
               >
-                <Text style={styles.saveBtnText}>✅  Confirm Import</Text>
+                <Text style={styles.saveBtnText}>Confirm Import</Text>
               </TouchableOpacity>
             </View>
 
@@ -615,26 +644,30 @@ export default function SchoolScreen({ navigation }) {
                         </Text>
                       </View>
                       <Text style={styles.previewName}>{row.name || '(పేరు లేదు)'}</Text>
-                      {row.udise ? <Text style={styles.previewMeta}>📋 {row.udise}</Text> : null}
+                      {row.udise ? <IconText icon="identifier" style={styles.previewMeta}>{row.udise}</IconText> : null}
                       {row.status === 'error' ? (
                         <Text style={styles.previewError}>{row.error}</Text>
                       ) : (
                         <>
                           {row.data.type ? (
-                            <Text style={styles.previewMeta}>🏷️ {row.data.type} · 🎓 {row.data.minClass}–{row.data.maxClass}</Text>
+                            <IconText icon="tag-outline" style={styles.previewMeta}>{row.data.type} · తరగతులు {row.data.minClass}–{row.data.maxClass}</IconText>
                           ) : null}
-                          {rs ? <Text style={styles.previewMeta}>👦 {rs.boys} · 👧 {rs.girls} · మొత్తం {rs.total}</Text> : null}
+                          {rs ? <IconText icon="human-male-female" style={styles.previewMeta}>Boys {rs.boys} · Girls {rs.girls} · మొత్తం {rs.total}</IconText> : null}
                           {row.newTotal !== undefined ? (
-                            <Text style={[styles.previewMeta, row.oldTotal !== null && row.newTotal < row.oldTotal && { color: Colors.danger, fontWeight: '700' }]}>
+                            <IconText
+                              icon="account-group-outline"
+                              color={row.oldTotal !== null && row.newTotal < row.oldTotal ? Colors.danger : Colors.textMuted}
+                              style={[styles.previewMeta, row.oldTotal !== null && row.newTotal < row.oldTotal && { color: Colors.danger, fontWeight: '700' }]}
+                            >
                               {row.oldTotal === null
-                                ? `👥 Roll ${row.newTotal} (కొత్త)`
-                                : `👥 Roll ${row.oldTotal} → ${row.newTotal} (${row.newTotal - row.oldTotal >= 0 ? '+' : ''}${row.newTotal - row.oldTotal})`}
-                            </Text>
+                                ? `Roll ${row.newTotal} (కొత్త)`
+                                : `Roll ${row.oldTotal} → ${row.newTotal} (${row.newTotal - row.oldTotal >= 0 ? '+' : ''}${row.newTotal - row.oldTotal})`}
+                            </IconText>
                           ) : null}
                           {(row.warnings || []).map((w, wi) => (
-                            <Text key={wi} style={[styles.previewMeta, { color: Colors.danger }]}>⚠️ {w}</Text>
+                            <IconText key={wi} icon="alert-outline" color={Colors.danger} style={[styles.previewMeta, { color: Colors.danger }]}>{w}</IconText>
                           ))}
-                          {row.data.address ? <Text style={styles.previewMeta}>📍 {row.data.address}</Text> : null}
+                          {row.data.address ? <IconText icon="map-marker-outline" style={styles.previewMeta}>{row.data.address}</IconText> : null}
                         </>
                       )}
                     </View>
@@ -661,15 +694,15 @@ const styles = StyleSheet.create({
   backBtnText: { fontSize: 16, color: Colors.primary, fontWeight: '600' },
   topActions:  { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' },
 
-  uploadBtn:     { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: Colors.primary, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.lg },
+  uploadBtn:     { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1.5, borderColor: Colors.primary, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.lg },
   uploadBtnText: { color: Colors.primary, fontWeight: '700', fontSize: 13 },
 
   addBtn:     { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, backgroundColor: Colors.primary, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.lg },
-  addBtnIcon: { fontSize: 14, color: Colors.primaryText, fontWeight: '700' },
   addBtnText: { color: Colors.primaryText, fontWeight: '700', fontSize: 13 },
 
   uploadHint: { fontSize: 11, color: Colors.textMuted, marginBottom: Spacing.sm },
-  tplLink:     { alignSelf: 'flex-start', marginBottom: Spacing.sm },
+  iconText:    { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  tplLink:     { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: Spacing.sm },
   tplLinkText: { fontSize: 12, color: Colors.primary, fontWeight: '700' },
   pillsRow:    { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.sm },
   typePill:    { flex: 1, paddingVertical: Spacing.sm, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.cardBorder, alignItems: 'center', backgroundColor: Colors.background },
@@ -682,7 +715,7 @@ const styles = StyleSheet.create({
   rollRow:     { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.xs },
   rollClass:   { width: 56, fontSize: 13, fontWeight: '700', color: Colors.textPrimary },
   rollHeadText:{ fontSize: 11, fontWeight: '700', color: Colors.textSecondary },
-  rollHeadCell:{ flex: 1, textAlign: 'center' },
+  rollHeadBox: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
   rollInput:   { flex: 1, borderWidth: 1, borderColor: Colors.primary, borderRadius: Radius.sm, paddingVertical: Spacing.xs, textAlign: 'center', fontSize: 14, fontWeight: '700', color: Colors.primary, backgroundColor: Colors.surface },
   rollTotal:   { fontSize: 12, fontWeight: '700', color: Colors.primary, marginTop: Spacing.xs, textAlign: 'center' },
   rollInfo:    { fontSize: 11, color: Colors.textMuted, marginBottom: Spacing.sm },
@@ -694,7 +727,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md, marginBottom: Spacing.sm,
     borderWidth: 0.5, borderColor: Colors.cardBorder, gap: Spacing.sm,
   },
-  searchIcon:  { fontSize: 16 },
   searchInput: { flex: 1, paddingVertical: Spacing.md, fontSize: 14, color: Colors.textPrimary },
 
   schoolCard:  { marginBottom: Spacing.sm, flexDirection: 'row', alignItems: 'flex-start' },
@@ -710,7 +742,7 @@ const styles = StyleSheet.create({
   editBtn:     { backgroundColor: Colors.primaryLight, padding: Spacing.sm, borderRadius: Radius.sm },
   deleteBtn:   { backgroundColor: Colors.dangerBg, padding: Spacing.sm, borderRadius: Radius.sm },
 
-  emptyEmoji: { fontSize: 52, marginBottom: Spacing.md },
+  emptyIcon:  { marginBottom: Spacing.md },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary, marginBottom: Spacing.xs },
   emptyHint:  { ...Typography.bodySm, textAlign: 'center' },
 
@@ -726,7 +758,8 @@ const styles = StyleSheet.create({
     maxHeight: '85%',
   },
   modalHandle:  { width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.cardBorder, alignSelf: 'center', marginBottom: Spacing.md },
-  modalTitle:   { fontSize: 20, fontWeight: '800', color: Colors.primaryDark, marginBottom: Spacing.md },
+  modalTitleRow:{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.md },
+  modalTitle:   { fontSize: 20, fontWeight: '800', color: Colors.primaryDark },
   inputLabel:   { ...Typography.label, marginBottom: Spacing.xs, marginTop: Spacing.xs },
   input: {
     borderWidth: 1, borderColor: Colors.cardBorder, borderRadius: Radius.md,
@@ -750,5 +783,5 @@ const styles = StyleSheet.create({
   previewSummary: { fontSize: 12, fontWeight: '600', color: Colors.textSecondary, marginBottom: Spacing.sm },
   badge:        { paddingHorizontal: 6, paddingVertical: 1, borderRadius: Radius.sm, alignSelf: 'flex-start', marginBottom: 2 },
   badgeText:    { fontSize: 10, fontWeight: '700' },
-  saveBtnOff:   { backgroundColor: '#a5b4fc' },
+  saveBtnOff:   { backgroundColor: '#9DB89F' },
 });

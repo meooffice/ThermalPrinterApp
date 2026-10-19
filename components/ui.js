@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Colors, Spacing, Radius, Typography } from '../Themes';
 
 // ─── StatusBar color helper ───────────────────────────────────────────────────
@@ -27,7 +28,7 @@ export function ScreenHeader({ title, subtitle }) {
 }
 
 // ─── Primary Button ───────────────────────────────────────────────────────────
-export function AppButton({ label, onPress, variant = 'primary' }) {
+export function AppButton({ label, onPress, variant = 'primary', icon, disabled }) {
   const btnStyle =
     variant === 'primary'
       ? styles.btnPrimary
@@ -42,8 +43,15 @@ export function AppButton({ label, onPress, variant = 'primary' }) {
       : styles.btnGhostText;
 
   return (
-    <TouchableNativeFeedback onPress={onPress} background={TouchableNativeFeedback.Ripple('#c7d2fe', false)}>
-      <View style={[styles.btnBase, btnStyle]}>
+    <TouchableNativeFeedback onPress={onPress} disabled={disabled} background={TouchableNativeFeedback.Ripple(Colors.primaryLight, false)}>
+      <View style={[styles.btnBase, btnStyle, disabled && styles.btnDisabled]}>
+        {icon ? (
+          <MaterialCommunityIcons
+            name={icon}
+            size={16}
+            color={variant === 'primary' ? Colors.primaryText : variant === 'outline' ? Colors.primary : Colors.textMuted}
+          />
+        ) : null}
         <Text style={txtStyle}>{label}</Text>
       </View>
     </TouchableNativeFeedback>
@@ -64,7 +72,7 @@ export function SettingsRow({ label, icon, onPress, isLast }) {
           {icon && <View style={styles.settingsIconBox}>{icon}</View>}
           <Text style={styles.settingsLabel}>{label}</Text>
         </View>
-        <Text style={styles.chevron}>›</Text>
+        <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.textMuted} />
       </View>
     </TouchableOpacity>
   );
@@ -111,21 +119,26 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'android' ? Spacing.lg : Spacing.xl,
     paddingBottom: Spacing.md,
     paddingHorizontal: Spacing.lg,
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
   headerSub: { ...Typography.headerSub, marginBottom: 2 },
   headerTitle: { ...Typography.headerTitle },
 
   // Buttons
   btnBase: {
-    borderRadius: Radius.lg,
-    paddingVertical: 12,
+    borderRadius: Radius.xl,
+    paddingVertical: 13,
+    flexDirection: 'row',
+    gap: 6,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
+  btnDisabled: { opacity: 0.5 },
   btnPrimary: { backgroundColor: Colors.primary },
-  btnOutline: { backgroundColor: Colors.surface, borderWidth: 1, borderColor: '#c7d2fe' },
-  btnGhost: { backgroundColor: '#f9fafb' },
+  btnOutline: { backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.accent },
+  btnGhost: { backgroundColor: Colors.warm },
   btnPrimaryText: { color: Colors.primaryText, fontSize: 13, fontWeight: '600' },
   btnOutlineText: { color: Colors.primary, fontSize: 13, fontWeight: '500' },
   btnGhostText: { color: Colors.textMuted, fontSize: 13, fontWeight: '500' },
@@ -133,10 +146,11 @@ const styles = StyleSheet.create({
   // Card
   card: {
     backgroundColor: Colors.surface,
-    borderRadius: Radius.lg,
+    borderRadius: Radius.xl,
     borderWidth: 1,
     borderColor: Colors.cardBorder,
     padding: Spacing.md,
+    elevation: 1,
   },
 
   // Settings
@@ -147,26 +161,25 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.md,
   },
-  settingsRowBorder: { borderBottomWidth: 0.5, borderColor: '#f3f4f6' },
+  settingsRowBorder: { borderBottomWidth: 0.5, borderColor: Colors.cardBorder },
   settingsLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   settingsIconBox: {
-    width: 28,
-    height: 28,
+    width: 32,
+    height: 32,
     backgroundColor: Colors.primaryLight,
-    borderRadius: Radius.sm,
+    borderRadius: Radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   settingsLabel: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' },
-  chevron: { fontSize: 18, color: Colors.textMuted },
 
   // Stepper
   stepper: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   stepBtn: {
-    width: 26,
-    height: 26,
+    width: 30,
+    height: 30,
     backgroundColor: Colors.primaryLight,
-    borderRadius: Radius.sm,
+    borderRadius: Radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -8,8 +8,9 @@ import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   Alert, StyleSheet, ActivityIndicator, Modal, FlatList,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import BluetoothService from '../services/BluetoothService';
 import { buildReceiptBase64, buildReceiptPreview, loadLogo } from '../services/ReceiptPrinter';
@@ -29,19 +30,48 @@ import { Card, Stepper } from '../components/ui';
 import Hero from '../components/Hero';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
+// MaterialCommunityIcons names (display only)
 const CAT_ICONS  = {
-  'Prime Textbook': '📗',
-  'HS Text Books':  '📘',
-  'Notebooks':      '📒',
-  'Kits':           '📦',
-  'Boys Shoes':     '👟',
-  'Girls Shoes':    '👡',
-  'Shoes':          '👟',
-  'Others':         '🗂️',
+  'Prime Textbook': 'book-open-page-variant-outline',
+  'HS Text Books':  'book-multiple-outline',
+  'Notebooks':      'notebook-outline',
+  'Kits':           'bag-personal-outline',
+  'Boys Shoes':     'shoe-sneaker',
+  'Girls Shoes':    'shoe-heel',
+  'Shoes':          'shoe-sneaker',
+  'Others':         'shape-outline',
+};
+
+// Section heading: icon + uppercase label
+const SectionHead = ({ icon, children }) => (
+  <View style={styles.sectionRow}>
+    <MaterialCommunityIcons name={icon} size={16} color={Colors.primary} />
+    <Text style={styles.sectionTitle}>{children}</Text>
+  </View>
+);
+
+// Icon + text on one row (text can wrap)
+// Outer margins of the given text style are moved to the row, so icon and text stay centred together
+const IconText = ({ icon, size = 16, color = Colors.primary, style, children }) => {
+  const { margin, marginTop, marginBottom, marginVertical, ...textStyle } = StyleSheet.flatten(style) || {};
+  return (
+    <View style={[styles.iconTextRow, { margin, marginTop, marginBottom, marginVertical }]}>
+      <MaterialCommunityIcons name={icon} size={size} color={color} />
+      <Text style={[textStyle, styles.iconTextFlex]}>{children}</Text>
+    </View>
+  );
+};
+
+// Semester of a catalog item as a number (1, 2 ...), or null when the item has none (Kits, Notebooks, Shoes ...)
+const semOf = (it) => {
+  const n = parseInt(it && it.semester, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
 };
 
 // ─── Component // ─── Component // ─── Component ───────────────────────────────────────────────────────────────
 export default function ReceiptScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
+  const sheetPad = { paddingBottom: Spacing.xl + insets.bottom };   // keep bottom sheet buttons above the Android nav bar
   const [settings, setSettings]             = useState(null);
   const [schools, setSchools]               = useState([]);
   const [catalog, setCatalog]               = useState([]);
@@ -71,6 +101,12 @@ export default function ReceiptScreen({ navigation }) {
   const [sizeDraft, setSizeDraft]           = useState({});      // { size: '3' } being edited in that popup
   const [sizeInfo, setSizeInfo]             = useState({ avail: {}, givenBy: {} });   // stock left per item+size / this school's given per item+size
 
+  const [semester, setSemester]           = useState(null);    // Semester chosen for this receipt (null = not chosen yet / not needed)
+  const [semModal, setSemModal]             = useState(false);   // "which Semester?" popup
+  const semMap = {};                                              // itemId -> Semester number (or null)
+  catalog.forEach(c => { semMap[c.id] = semOf(c); });
+  const semList = [...new Set(catalog.map(semOf).filter(n => n !== null))].sort((a, b) => a - b);
+
   useFocusEffect(useCallback(() => {
     loadData();
     loadLogo(); // pre-warm logo cache
@@ -95,7 +131,9 @@ export default function ReceiptScreen({ navigation }) {
     setSchoolModal(false);
     setSchoolSearch('');
     setLoadingSchool(true);
-    if (!opts.silent) { setShowAll(false); setRollConfirmed(false); setRollEdit(false); }
+    if (!opts.silent) { setShowAll(false); setRollConfirmed(false); setRollEdit(false); setSemester(null); }
+    // Semester in force for this checklist: given by chooseSemester, kept on a silent refresh, none for a new school
+    const activeSem = opts.semester !== undefined ? opts.semester : (opts.silent ? semester : null);
 
     const rolled = rollSummary(school).total > 0;
     let given = {}, receiptCount = null, avail = null, givenBySize = {}, availBySize = {};
@@ -124,13 +162,15 @@ export default function ReceiptScreen({ navigation }) {
       nextPlan[catItem.id] = { required, given: givenQty, stock: stockLeft };
       const hasStock = stockLeft === null || stockLeft > 0;
       const sized = Array.isArray(catItem.sizes) && catItem.sizes.length > 0;   // e.g. Shoes: given size-wise through a popup
+      const cs = semOf(catItem);
+      const semHidden = activeSem !== null && cs !== null && cs !== activeSem;   // other Semester's book: not in this receipt
       return {
         id:       catItem.id,
         name:     catItem.name,
         category: catItem.category || 'Others',
         subType:  catItem.subType || 'Common',
-        checked:  !sized && hasStock && (rolled ? remaining > 0 : savedCounts[catItem.id] !== undefined),
-        count:    sized ? '0'
+        checked:  !semHidden && !sized && hasStock && (rolled ? remaining > 0 : savedCounts[catItem.id] !== undefined),
+        count:    (sized || semHidden) ? '0'
                 : rolled ? String(stockLeft === null ? remaining : Math.min(remaining, stockLeft))
                          : (hasStock ? (savedCounts[catItem.id] || '0') : '0'),
         sizeList:   sized ? catItem.sizes : [],
@@ -148,16 +188,48 @@ export default function ReceiptScreen({ navigation }) {
     [...types, ...checklist.map(i => i.category)].forEach(c => {
       initCollapsed[c] = !checklist.some(i => i.category === c && i.checked);
     });
-    if (!opts.silent) setCollapsedCats(initCollapsed);
+    if (!opts.silent || opts.semester !== undefined) setCollapsedCats(initCollapsed);
     setLoadingSchool(false);
   };
 
   // With a roll: only items that apply to this school (or already given / selected) unless "show all" is on
+  // Items of the other Semester are never shown (items without a Semester always are)
+  const semOk = (i) => semester === null || semMap[i.id] == null || semMap[i.id] === semester;
   const isVisible = (i) =>
-    !hasRoll || showAll || i.checked || (plan[i.id]?.required || 0) > 0 || (plan[i.id]?.given || 0) > 0;
+    semOk(i) && (!hasRoll || showAll || i.checked || (plan[i.id]?.required || 0) > 0 || (plan[i.id]?.given || 0) > 0);
 
   // ── Roll popup (shown after choosing a school) ───────────────────────────
-  const proceedWithRoll = () => { setRollPopup(false); setRollEdit(false); setRollConfirmed(true); };
+  const proceedWithRoll = () => {
+    setRollPopup(false);
+    setRollEdit(false);
+    // Books of Semester 1 and 2 are never mixed in one receipt: ask which one first
+    if (semList.length > 1 && semester === null) { setSemModal(true); return; }
+    setRollConfirmed(true);
+  };
+
+  // Rebuilds the checklist for the chosen Semester (the other Semester's books are left out), then shows the items
+  const chooseSemester = async (n) => {
+    setSemModal(false);
+    setSemester(n);
+    try {
+      await selectSchool(selectedSchool, { silent: true, semester: n });
+      setRollConfirmed(true);
+    } catch (e) {
+      Alert.alert('Semester', e.message);
+    }
+  };
+
+  const pickSemester = (n) => {
+    if (n === semester) { setSemModal(false); return; }
+    if (semester !== null && checkedItems.length > 0) {
+      Alert.alert('Semester మారుస్తారా?', `ఇప్పుడు tick చేసిన ${checkedItems.length} items తొలగిపోతాయి.`, [
+        { text: 'వెనక్కి', style: 'cancel' },
+        { text: 'మార్చు', onPress: () => chooseSemester(n) },
+      ]);
+      return;
+    }
+    chooseSemester(n);
+  };
 
   const startRollEdit = () => {
     const f = {};
@@ -351,7 +423,7 @@ export default function ReceiptScreen({ navigation }) {
       }
       const noSizes = checkedItems.filter(i => isSized(i) && Object.keys(i.sizes || {}).length === 0);
       if (noSizes.length > 0) {
-        Alert.alert('Sizes నమోదు చేయండి', noSizes.slice(0, 8).map(i => `• ${i.name}`).join('\n') + '\n\nItem మీద ✏️ Sizes నొక్కి size వారీ సంఖ్యలు ఇవ్వండి.');
+        Alert.alert('Sizes నమోదు చేయండి', noSizes.slice(0, 8).map(i => `• ${i.name}`).join('\n') + '\n\nItem మీద Sizes నొక్కి size వారీ సంఖ్యలు ఇవ్వండి.');
         return;
       }
       const badReturnSize = [];
@@ -451,7 +523,7 @@ export default function ReceiptScreen({ navigation }) {
       }
 
       if (issued === 0) {                     // nothing produced: no number used, nothing saved
-        Alert.alert('❌ Failed', failure ? failure.message : 'Print కాలేదు');
+        Alert.alert('Failed', failure ? failure.message : 'Print కాలేదు');
         return;
       }
 
@@ -470,7 +542,7 @@ export default function ReceiptScreen({ navigation }) {
         }, [InvoiceSerial.commitPair(ay, serialNo)]);
       } catch (e) {
         try { await InvoiceSerial.commit(ay, serialNo); } catch { /* ignore */ }
-        Alert.alert('⚠️ Print అయింది, కానీ History లో save కాలేదు',
+        Alert.alert('Print అయింది, కానీ History లో save కాలేదు',
           `Invoice: ${invoiceNo}\n${e.message}\nఈ invoice number ను గుర్తుంచుకోండి.`);
         return;
       }
@@ -479,15 +551,15 @@ export default function ReceiptScreen({ navigation }) {
       try { await selectSchool(selectedSchool, { silent: true }); } catch { /* refresh is optional */ }   // new Given / next spell
 
       if (failure) {
-        Alert.alert('⚠️ కొన్ని copies మాత్రమే print అయ్యాయి',
+        Alert.alert('కొన్ని copies మాత్రమే print అయ్యాయి',
           `Invoice: ${invoiceNo}\n${issued}/${numCopies} copies print అయ్యాయి.\n${failure.message}`);
       } else if (channel === 'thermal') {
-        Alert.alert('✅ Success', `Invoice: ${invoiceNo}\n${numCopies} copy/copies printed!`);
+        Alert.alert('Success', `Invoice: ${invoiceNo}\n${numCopies} copy/copies printed!`);
       } else {
-        Alert.alert('✅ Receipt సిద్ధం', `Invoice: ${invoiceNo}`);
+        Alert.alert('Receipt సిద్ధం', `Invoice: ${invoiceNo}`);
       }
     } catch (error) {
-      Alert.alert('❌ Failed', error.message);
+      Alert.alert('Failed', error.message);
     } finally {
       setPrinting(false);
       printLockRef.current = false;
@@ -507,7 +579,7 @@ export default function ReceiptScreen({ navigation }) {
 
   const groupedItems = [...types, ...extraCats].map(cat => ({
     cat,
-    icon: CAT_ICONS[cat] || '🏷️',
+    icon: CAT_ICONS[cat] || 'tag-outline',
     rows: items.filter(i => i.category === cat && isVisible(i)),
   })).filter(g => g.rows.length > 0);
 
@@ -531,10 +603,10 @@ export default function ReceiptScreen({ navigation }) {
         keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
         {/* School Selector */}
-        <Text style={styles.sectionTitle}>🏫  School</Text>
+        <SectionHead icon="school-outline">School</SectionHead>
         <TouchableOpacity style={styles.schoolSelector} onPress={() => setSchoolModal(true)}>
           <View style={styles.schoolSelectorLeft}>
-            <View style={styles.schoolSelectorIcon}><Text style={{ fontSize: 20 }}>🏫</Text></View>
+            <View style={styles.schoolSelectorIcon}><MaterialCommunityIcons name="school-outline" size={22} color={Colors.primary} /></View>
             <View>
               {selectedSchool ? (
                 <>
@@ -546,11 +618,11 @@ export default function ReceiptScreen({ navigation }) {
               )}
             </View>
           </View>
-          <Text style={styles.arrow}>▼</Text>
+          <MaterialCommunityIcons name="chevron-down" size={22} color={Colors.textMuted} />
         </TouchableOpacity>
 
         {/* Spell */}
-        <Text style={styles.sectionTitle}>📋  Distribution Spell</Text>
+        <SectionHead icon="clipboard-list-outline">Distribution Spell</SectionHead>
         <Card>
           <View style={styles.spellRow}>
             <Text style={styles.spellLabel}>Spell Number</Text>
@@ -562,17 +634,17 @@ export default function ReceiptScreen({ navigation }) {
         </Card>
 
         {/* Kit Items */}
-        <Text style={styles.sectionTitle}>📦  Kit Items{selectedSchool ? `  —  ${checkedItems.length} selected` : ''}</Text>
+        <SectionHead icon="package-variant-closed">{`Kit Items${selectedSchool ? `  —  ${checkedItems.length} selected` : ''}`}</SectionHead>
 
         {catalog.length === 0 ? (
           <Card style={styles.emptyCard}>
-            <Text style={styles.emptyIcon}>📦</Text>
+            <MaterialCommunityIcons name="package-variant-closed" size={40} color={Colors.textMuted} style={styles.emptyIcon} />
             <Text style={styles.emptyText}>Catalog లో items లేవు</Text>
             <Text style={styles.emptyHint}>Settings → Item Catalog లో add చేయండి</Text>
           </Card>
         ) : !selectedSchool ? (
           <Card style={styles.emptyCard}>
-            <Text style={styles.emptyIcon}>🏫</Text>
+            <MaterialCommunityIcons name="school-outline" size={40} color={Colors.textMuted} style={styles.emptyIcon} />
             <Text style={styles.emptyHint}>స్కూల్ select చేసిన తర్వాత checklist వస్తుంది</Text>
           </Card>
         ) : loadingSchool ? (
@@ -580,17 +652,22 @@ export default function ReceiptScreen({ navigation }) {
         ) : !rollConfirmed ? (
           <TouchableOpacity onPress={() => setRollPopup(true)}>
             <Card style={styles.emptyCard}>
-              <Text style={styles.emptyIcon}>📋</Text>
+              <MaterialCommunityIcons name="clipboard-text-outline" size={40} color={Colors.textMuted} style={styles.emptyIcon} />
               <Text style={styles.emptyHint}>Roll చూసి Proceed చేస్తే items వస్తాయి (ఇక్కడ నొక్కండి)</Text>
             </Card>
           </TouchableOpacity>
         ) : (
           <>
+          {semList.length > 1 && semester !== null ? (
+            <TouchableOpacity onPress={() => setSemModal(true)}>
+              <IconText icon="book-open-page-variant-outline" size={16} style={styles.planToggle}>{`Semester ${semester}  ·  మార్చు`}</IconText>
+            </TouchableOpacity>
+          ) : null}
           {!hasRoll ? (
-            <Text style={styles.planNote}>⚠️ ఈ school కి roll నమోదు కాలేదు — అన్ని items చూపిస్తున్నాను. Schools లో roll నమోదు చేస్తే auto లెక్క వస్తుంది.</Text>
+            <IconText icon="alert-outline" size={16} color={Colors.danger} style={styles.planNote}>ఈ school కి roll నమోదు కాలేదు — అన్ని items చూపిస్తున్నాను. Schools లో roll నమోదు చేస్తే auto లెక్క వస్తుంది.</IconText>
           ) : (
             <TouchableOpacity onPress={() => setShowAll(v => !v)}>
-              <Text style={styles.planToggle}>{showAll ? '▲ ఈ school కి వర్తించే items మాత్రమే చూపించు' : '▼ ఇతర items కూడా చూపించు'}</Text>
+              <IconText icon={showAll ? 'chevron-up' : 'chevron-down'} size={18} style={styles.planToggle}>{showAll ? 'ఈ school కి వర్తించే items మాత్రమే చూపించు' : 'ఇతర items కూడా చూపించు'}</IconText>
             </TouchableOpacity>
           )}
           {groupedItems.map(({ cat, icon, rows }) => {
@@ -607,10 +684,10 @@ export default function ReceiptScreen({ navigation }) {
                     {allChecked && <Text style={styles.catCheckmark}>✓</Text>}
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.catTitleRow} onPress={() => toggleCategory(cat)} activeOpacity={0.7}>
-                    <Text style={styles.catIcon}>{icon}</Text>
+                    <MaterialCommunityIcons name={icon} size={18} color={Colors.primary} />
                     <Text style={styles.catTitle}>{cat}</Text>
                     <View style={styles.catBadge}><Text style={styles.catBadgeText}>{checked}/{total}</Text></View>
-                    <Text style={styles.catChevron}>{isCollapsed ? '▶' : '▼'}</Text>
+                    <MaterialCommunityIcons name={isCollapsed ? 'chevron-right' : 'chevron-down'} size={20} color={Colors.textMuted} />
                   </TouchableOpacity>
                 </View>
                 {!isCollapsed && rows.map(item => (
@@ -623,7 +700,8 @@ export default function ReceiptScreen({ navigation }) {
                     <Text style={[styles.checkItemName, !item.checked && styles.checkItemNameMuted]}>{item.name}{item.subType && item.subType !== 'Common' ? `  · ${item.subType}` : ''}{hasRoll && plan[item.id] ? <Text style={styles.planHint}>{`\nఅవసరం ${plan[item.id].required} · ఇచ్చినవి ${plan[item.id].given} · మిగిలినవి ${Math.max(0, plan[item.id].required - plan[item.id].given)}${plan[item.id].stock === null ? '' : ` · stock ${plan[item.id].stock}`}`}</Text> : null}</Text>
                     {item.checked && isSized(item) && (
                       <TouchableOpacity style={styles.sizeBtn} onPress={() => openSizes(item)} activeOpacity={0.8}>
-                        <Text style={styles.sizeBtnText}>📏 {withSizes(item).count}</Text>
+                        <MaterialCommunityIcons name="ruler" size={14} color={Colors.primary} />
+                        <Text style={styles.sizeBtnText}>{withSizes(item).count}</Text>
                       </TouchableOpacity>
                     )}
                     {item.checked && !isSized(item) && (
@@ -642,7 +720,7 @@ export default function ReceiptScreen({ navigation }) {
         {/* Summary */}
         {checkedItems.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>📊  Summary</Text>
+            <SectionHead icon="chart-box-outline">Summary</SectionHead>
             <Card>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Selected Items</Text>
@@ -661,7 +739,7 @@ export default function ReceiptScreen({ navigation }) {
           onPress={() => validateAndAskCopies('thermal')} disabled={printing}>
           {printing ? <ActivityIndicator color={Colors.primaryText} /> : (
             <View style={styles.printBtnInner}>
-              <Text style={styles.printBtnIcon}>🖨️</Text>
+              <MaterialCommunityIcons name="printer" size={20} color={Colors.primaryText} />
               <Text style={styles.printBtnText}>Thermal Printer లో Print</Text>
             </View>
           )}
@@ -669,16 +747,19 @@ export default function ReceiptScreen({ navigation }) {
 
         {/* Preview */}
         <TouchableOpacity style={styles.previewBtn} onPress={openPreview} disabled={printing}>
-          <Text style={styles.previewBtnText}>👁️  Preview</Text>
+          <View style={styles.printBtnInner}>
+            <MaterialCommunityIcons name="eye-outline" size={18} color={Colors.primary} />
+            <Text style={styles.previewBtnText}>Preview</Text>
+          </View>
         </TouchableOpacity>
 
         {/* Share Row */}
         <View style={styles.shareRow}>
           <TouchableOpacity style={styles.shareBtn} onPress={() => validateAndAskCopies('pdf')}>
-            <Text style={styles.shareBtnIcon}>📄</Text><Text style={styles.shareBtnText}>PDF</Text>
+            <MaterialCommunityIcons name="file-pdf-box" size={18} color={Colors.primary} /><Text style={styles.shareBtnText}>PDF</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.shareBtn} onPress={() => validateAndAskCopies('system')}>
-            <Text style={styles.shareBtnIcon}>🖨️</Text><Text style={styles.shareBtnText}>System Print</Text>
+            <MaterialCommunityIcons name="printer-outline" size={18} color={Colors.primary} /><Text style={styles.shareBtnText}>System Print</Text>
           </TouchableOpacity>
         </View>
 
@@ -687,10 +768,10 @@ export default function ReceiptScreen({ navigation }) {
         {/* School Modal */}
         <Modal visible={schoolModal} animationType="slide" transparent onRequestClose={() => setSchoolModal(false)}>
           <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>🏫  స్కూల్ Select చేయండి</Text>
+            <View style={[styles.modalContent, sheetPad]}>
+              <IconText icon="school-outline" size={22} color={Colors.primaryDark} style={styles.modalTitle}>స్కూల్ Select చేయండి</IconText>
               <View style={styles.modalSearchBox}>
-                <Text style={{ fontSize: 14 }}>🔍</Text>
+                <MaterialCommunityIcons name="magnify" size={20} color={Colors.textMuted} />
                 <TextInput style={styles.modalSearchInput} placeholder="పేరు లేదా UDISE search..."
                   value={schoolSearch} onChangeText={setSchoolSearch} placeholderTextColor={Colors.textMuted} />
               </View>
@@ -700,13 +781,13 @@ export default function ReceiptScreen({ navigation }) {
                 <FlatList data={filteredSchools} keyExtractor={item => item.id} style={{ maxHeight: 380 }}
                   renderItem={({ item }) => (
                     <TouchableOpacity style={styles.schoolItem} onPress={() => selectSchool(item)}>
-                      <View style={styles.schoolItemIcon}><Text style={{ fontSize: 16 }}>🏫</Text></View>
+                      <View style={styles.schoolItemIcon}><MaterialCommunityIcons name="school-outline" size={18} color={Colors.primary} /></View>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.schoolItemName}>{item.name}</Text>
                         {item.udise   ? <Text style={styles.schoolItemSub}>UDISE: {item.udise}</Text> : null}
                         {item.address ? <Text style={styles.schoolItemSub}>{item.address}</Text>      : null}
                       </View>
-                      <Text style={styles.arrow}>›</Text>
+                      <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.textMuted} />
                     </TouchableOpacity>
                   )} />
               )}
@@ -721,8 +802,8 @@ export default function ReceiptScreen({ navigation }) {
         <Modal visible={rollPopup && !!selectedSchool && !loadingSchool} animationType="fade" transparent
           onRequestClose={() => { if (!rollSaving) { setRollPopup(false); setRollEdit(false); } }}>
           <View style={styles.modalOverlay}>
-            <View style={[styles.copiesModal, { height: '75%' }]}>
-              <Text style={styles.modalTitle}>📋  Roll — {selectedSchool?.name}</Text>
+            <View style={[styles.copiesModal, sheetPad, { height: '75%' }]}>
+              <IconText icon="clipboard-text-outline" size={22} color={Colors.primaryDark} style={styles.modalTitle}>{`Roll — ${selectedSchool?.name ?? ''}`}</IconText>
               {selectedSchool && classRange(selectedSchool.minClass, selectedSchool.maxClass).length > 0 ? (
                 <>
                   <View style={styles.rollHead}>
@@ -775,7 +856,7 @@ export default function ReceiptScreen({ navigation }) {
                   <>
                     {selectedSchool && classRange(selectedSchool.minClass, selectedSchool.maxClass).length > 0 && (
                       <TouchableOpacity style={styles.cancelBtn} onPress={startRollEdit}>
-                        <Text style={styles.cancelBtnText}>✏️ Update</Text>
+                        <IconText icon="pencil-outline" size={16} color={Colors.textSecondary} style={styles.cancelBtnText}>Update</IconText>
                       </TouchableOpacity>
                     )}
                     <TouchableOpacity style={styles.confirmBtn} onPress={proceedWithRoll}>
@@ -791,8 +872,8 @@ export default function ReceiptScreen({ navigation }) {
         {/* Preview Modal */}
         <Modal visible={previewModal} animationType="slide" transparent onRequestClose={() => setPreviewModal(false)}>
           <View style={styles.modalOverlay}>
-            <View style={[styles.copiesModal, { height: '85%' }]}>
-              <Text style={styles.modalTitle}>👁️  Receipt Preview</Text>
+            <View style={[styles.copiesModal, sheetPad, { height: '85%' }]}>
+              <IconText icon="eye-outline" size={22} color={Colors.primaryDark} style={styles.modalTitle}>Receipt Preview</IconText>
               <ScrollView style={styles.previewPaper} contentContainerStyle={{ padding: Spacing.md }}>
                 {previewLines.map((l, i) => (
                   <Text key={i} style={[styles.previewLine, l.bold && styles.previewBold, l.center && { textAlign: 'center' }]}>
@@ -806,7 +887,7 @@ export default function ReceiptScreen({ navigation }) {
                   <Text style={styles.cancelBtnText}>Close</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.confirmBtn} onPress={() => { setPreviewModal(false); validateAndAskCopies('thermal'); }}>
-                  <Text style={styles.confirmBtnText}>🖨️ Print</Text>
+                  <IconText icon="printer" size={16} color={Colors.primaryText} style={styles.confirmBtnText}>Print</IconText>
                 </TouchableOpacity>
               </View>
             </View>
@@ -821,8 +902,8 @@ export default function ReceiptScreen({ navigation }) {
               if (!it) return null;
               const p = plan[it.id];
               return (
-                <View style={[styles.copiesModal, { height: '85%' }]}>
-                  <Text style={styles.modalTitle}>📏  {it.name}</Text>
+                <View style={[styles.copiesModal, sheetPad, { height: '85%' }]}>
+                  <IconText icon="ruler" size={22} color={Colors.primaryDark} style={styles.modalTitle}>{it.name}</IconText>
                   <Text style={styles.sizeHint}>
                     {hasRoll && p ? `అవసరం ${p.required} · ఇచ్చినవి ${p.given} · మిగిలినవి ${Math.max(0, p.required - p.given)}\n` : ''}
                     ప్రతి size కి ఎన్ని ఇస్తున్నారో ఇవ్వండి (Return కి -)
@@ -868,11 +949,34 @@ export default function ReceiptScreen({ navigation }) {
           </View>
         </Modal>
 
+        {/* Semester popup (Semester 1 / 2 books are never mixed in one receipt) */}
+        <Modal visible={semModal} animationType="fade" transparent onRequestClose={() => setSemModal(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.copiesModal, sheetPad]}>
+              <IconText icon="book-open-page-variant-outline" size={22} color={Colors.primaryDark} style={styles.modalTitle}>ఏ Semester?</IconText>
+              <Text style={styles.copiesLabel}>ఒక receipt లో ఒక Semester పుస్తకాలు మాత్రమే వస్తాయి</Text>
+              <View style={styles.semRow}>
+                {semList.map(n => (
+                  <TouchableOpacity key={n} style={[styles.semBtn, semester === n && styles.semBtnActive]}
+                    onPress={() => pickSemester(n)} activeOpacity={0.8}>
+                    <Text style={[styles.semBtnText, semester === n && styles.semBtnTextActive]}>{`Semester ${n}`}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setSemModal(false)}>
+                  <Text style={styles.cancelBtnText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
         {/* Copies Modal */}
         <Modal visible={copiesModal} animationType="fade" transparent onRequestClose={() => setCopiesModal(false)}>
           <View style={styles.modalOverlay}>
-            <View style={styles.copiesModal}>
-              <Text style={styles.modalTitle}>🖨️  Copies</Text>
+            <View style={[styles.copiesModal, sheetPad]}>
+              <IconText icon="printer" size={22} color={Colors.primaryDark} style={styles.modalTitle}>Copies</IconText>
               <Text style={styles.copiesLabel}>ఎన్ని copies కావాలి?</Text>
               <View style={styles.copiesStepperWrap}>
                 <Stepper value={copies} onChange={setCopies} min={1} />
@@ -899,14 +1003,16 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content:   { padding: Spacing.lg, paddingBottom: Spacing.xl, gap: Spacing.sm },
   centered:  { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  sectionTitle: { ...Typography.label, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: Spacing.xs },
+  sectionRow:   { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs + 2, marginTop: Spacing.xs },
+  sectionTitle: { ...Typography.label, textTransform: 'uppercase', letterSpacing: 0.5, flexShrink: 1 },
+  iconTextRow:  { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs + 2 },
+  iconTextFlex: { flexShrink: 1 },
   schoolSelector: { backgroundColor: Colors.surface, borderRadius: Radius.lg, padding: Spacing.md, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: Colors.cardBorder, elevation: 1 },
   schoolSelectorLeft:  { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flex: 1 },
   schoolSelectorIcon:  { width: 40, height: 40, backgroundColor: Colors.primaryLight, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
   schoolPlaceholder:   { fontSize: 14, color: Colors.textMuted },
   schoolSelectedName:  { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
   schoolSelectedUdise: { fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
-  arrow: { color: Colors.textMuted, fontSize: 14, marginLeft: Spacing.sm },
   planHint:   { fontSize: 11, fontWeight: '500', color: Colors.textMuted },
   planNote:   { fontSize: 12, color: Colors.danger, marginBottom: Spacing.xs },
   planToggle: { fontSize: 12, fontWeight: '700', color: Colors.primary, paddingVertical: Spacing.xs },
@@ -921,19 +1027,17 @@ const styles = StyleSheet.create({
   catCheckboxActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
   catCheckmark:      { color: Colors.primaryText, fontSize: 12, fontWeight: '700' },
   catTitleRow:       { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
-  catIcon:           { fontSize: 16 },
   catTitle:          { flex: 1, fontSize: 13, fontWeight: '700', color: Colors.textPrimary, textTransform: 'uppercase', letterSpacing: 0.4 },
   catBadge:          { backgroundColor: Colors.primaryLight, paddingHorizontal: Spacing.sm, paddingVertical: 2, borderRadius: Radius.full },
   catBadgeText:      { fontSize: 11, fontWeight: '700', color: Colors.primary },
-  catChevron:        { fontSize: 11, color: Colors.textMuted, marginLeft: Spacing.xs },
   checkItem:          { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderTopWidth: 0.5, borderTopColor: Colors.cardBorder },
-  checkItemActive:    { backgroundColor: '#fafafe' },
+  checkItemActive:    { backgroundColor: '#F6FAF3' },
   checkbox:           { width: 22, height: 22, borderRadius: Radius.sm, borderWidth: 2, borderColor: Colors.cardBorder, alignItems: 'center', justifyContent: 'center' },
   checkboxActive:     { backgroundColor: Colors.primary, borderColor: Colors.primary },
   checkmark:          { color: Colors.primaryText, fontSize: 12, fontWeight: '700' },
   checkItemName:      { flex: 1, fontSize: 14, fontWeight: '600', color: Colors.textPrimary },
   checkItemNameMuted: { color: Colors.textMuted },
-  sizeBtn:            { backgroundColor: Colors.primaryLight, borderWidth: 1.5, borderColor: Colors.primary, borderRadius: Radius.sm, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs },
+  sizeBtn:            { backgroundColor: Colors.primaryLight, borderWidth: 1.5, borderColor: Colors.primary, borderRadius: Radius.sm, paddingHorizontal: Spacing.sm, paddingVertical: Spacing.xs, flexDirection: 'row', alignItems: 'center', gap: 4 },
   sizeBtnText:        { fontSize: 13, fontWeight: '800', color: Colors.primary },
   sizeHint:           { ...Typography.bodySm, textAlign: 'center', marginBottom: Spacing.sm },
   sizeRow:            { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.xs, borderBottomWidth: 0.5, borderBottomColor: Colors.cardBorder },
@@ -945,7 +1049,7 @@ const styles = StyleSheet.create({
   sizeTotal:          { fontSize: 14, fontWeight: '800', color: Colors.primary, marginTop: Spacing.sm },
   countInput:         { borderWidth: 1.5, borderColor: Colors.primary, borderRadius: Radius.sm, padding: Spacing.xs, width: 56, fontSize: 14, fontWeight: '700', color: Colors.primary, textAlign: 'center', backgroundColor: Colors.primaryLight },
   emptyCard:    { alignItems: 'center', gap: Spacing.xs },
-  emptyIcon:    { fontSize: 40, marginBottom: Spacing.xs },
+  emptyIcon:    { marginBottom: Spacing.xs },
   emptyText:    { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
   emptyHint:    { fontSize: 12, color: Colors.textMuted, textAlign: 'center' },
   summaryRow:   { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: Spacing.xs },
@@ -955,9 +1059,8 @@ const styles = StyleSheet.create({
   totalLabel:   { fontSize: 15, fontWeight: '700', color: Colors.textPrimary },
   totalValue:   { fontSize: 15, fontWeight: '800', color: Colors.primary },
   printBtn:         { backgroundColor: Colors.primary, padding: Spacing.md, borderRadius: Radius.lg, alignItems: 'center', marginTop: Spacing.sm, elevation: 2 },
-  printBtnDisabled: { backgroundColor: '#a5b4fc' },
+  printBtnDisabled: { backgroundColor: '#9DB89F' },
   printBtnInner:    { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  printBtnIcon:     { fontSize: 18 },
   previewBtn:       { backgroundColor: Colors.primaryLight, padding: Spacing.md, borderRadius: Radius.lg, alignItems: 'center', marginTop: Spacing.sm, borderWidth: 1, borderColor: Colors.primary },
   previewBtnText:   { color: Colors.primary, fontWeight: '700', fontSize: 14 },
   previewPaper:     { flex: 1, width: '100%', backgroundColor: '#fff', borderWidth: 1, borderColor: Colors.cardBorder, borderRadius: Radius.md },
@@ -967,7 +1070,6 @@ const styles = StyleSheet.create({
   printBtnText:     { color: Colors.primaryText, fontWeight: '700', fontSize: 15 },
   shareRow: { flexDirection: 'row', gap: Spacing.sm },
   shareBtn: { flex: 1, backgroundColor: Colors.surface, padding: Spacing.md, borderRadius: Radius.lg, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: Spacing.xs, borderWidth: 1, borderColor: Colors.primary },
-  shareBtnIcon: { fontSize: 15 },
   shareBtnText: { color: Colors.primary, fontWeight: '700', fontSize: 13 },
   rollHead:  { width: '100%', flexDirection: 'row', paddingVertical: Spacing.xs, borderBottomWidth: 1, borderBottomColor: Colors.cardBorder },
   rollCell:  { width: 64, textAlign: 'center', fontSize: 12, fontWeight: '700', color: Colors.textMuted },
@@ -976,6 +1078,11 @@ const styles = StyleSheet.create({
   rollVal:   { width: 64, textAlign: 'center', fontSize: 15, fontWeight: '800', color: Colors.textPrimary },
   rollInput: { width: 56, marginHorizontal: 4, borderWidth: 1, borderColor: Colors.primary, borderRadius: Radius.sm, padding: Spacing.xs, textAlign: 'center', fontSize: 14, fontWeight: '700', color: Colors.primary, backgroundColor: Colors.primaryLight },
   rollTotal: { marginTop: Spacing.sm, fontSize: 13, fontWeight: '700', color: Colors.primary },
+  semRow:           { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginBottom: Spacing.sm },
+  semBtn:           { flex: 1, minWidth: '40%', padding: Spacing.md, borderRadius: Radius.md, alignItems: 'center', borderWidth: 1.5, borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
+  semBtnActive:     { backgroundColor: Colors.primary },
+  semBtnText:       { fontSize: 15, fontWeight: '800', color: Colors.primary },
+  semBtnTextActive: { color: Colors.primaryText },
   modalOverlay:      { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalContent:      { backgroundColor: Colors.surface, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, padding: Spacing.lg, paddingBottom: 36 },
   copiesModal:       { backgroundColor: Colors.surface, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, padding: Spacing.lg, paddingBottom: 36, alignItems: 'center' },

@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import YearCloseService from '../services/YearCloseService';
 import BackupService from '../services/BackupService';
 import { Colors, Radius, Spacing, Typography } from '../constants/Theme';
@@ -13,6 +14,16 @@ import { Card } from '../components/ui';
 import Hero from '../components/Hero';
 
 const CONFIRM_WORD = 'CLOSE';
+
+// Section heading with an icon (display only)
+function SectionHead({ icon, label }) {
+  return (
+    <View style={styles.sectionRow}>
+      <MaterialCommunityIcons name={icon} size={16} color={Colors.primary} />
+      <Text style={styles.sectionTitle}>{label}</Text>
+    </View>
+  );
+}
 
 export default function YearCloseScreen({ navigation }) {
   const [info, setInfo]       = useState(null);
@@ -103,7 +114,7 @@ export default function YearCloseScreen({ navigation }) {
 
         {error ? (
           <View style={styles.centeredBox}>
-            <Text style={styles.emptyEmoji}>⚠️</Text>
+            <MaterialCommunityIcons name="alert-circle-outline" size={52} color={Colors.danger} style={styles.emptyIcon} />
             <Text style={styles.emptyTitle}>చదవలేకపోయాను</Text>
             <Text style={styles.emptyHint}>{error}</Text>
             <TouchableOpacity style={styles.retryBtn} onPress={load}>
@@ -114,7 +125,8 @@ export default function YearCloseScreen({ navigation }) {
           <>
             {doneYear && (
               <Card style={styles.okCard}>
-                <Text style={styles.okText}>✅ {doneYear} మొదలైంది. Invoice numbers 0001 నుండి, Roll లు promote అయ్యాయి.</Text>
+                <MaterialCommunityIcons name="check-circle" size={20} color={Colors.primary} />
+                <Text style={styles.okText}>{doneYear} మొదలైంది. Invoice numbers 0001 నుండి, Roll లు promote అయ్యాయి.</Text>
               </Card>
             )}
 
@@ -126,20 +138,31 @@ export default function YearCloseScreen({ navigation }) {
               <Text style={styles.line}>• Items, Schools, Settings అలాగే ఉంటాయి</Text>
             </Card>
 
-            <Text style={styles.sectionTitle}>1️⃣  Backup (తప్పనిసరి)</Text>
+            <SectionHead icon="numeric-1-circle-outline" label="Backup (తప్పనిసరి)" />
             <Card>
               <TouchableOpacity style={[styles.primaryBtn, backupBusy && styles.btnOff]} disabled={backupBusy} onPress={doBackup}>
-                {backupBusy ? <ActivityIndicator color={Colors.primaryText} /> : <Text style={styles.primaryBtnText}>💾 Backup తీసుకో & Save చేయి</Text>}
+                {backupBusy ? <ActivityIndicator color={Colors.primaryText} /> : (
+                  <>
+                    <MaterialCommunityIcons name="content-save-outline" size={18} color={Colors.primaryText} />
+                    <Text style={styles.primaryBtnText}>Backup తీసుకో & Save చేయి</Text>
+                  </>
+                )}
               </TouchableOpacity>
-              {backupFile ? <Text style={styles.okLine}>✅ Backup share అయింది: {backupFile}</Text>
+              {backupFile ? (
+                <View style={styles.okRow}>
+                  <MaterialCommunityIcons name="check-circle" size={16} color={Colors.success} />
+                  <Text style={styles.okLine}>Backup share అయింది: {backupFile}</Text>
+                </View>
+              )
                           : <Text style={styles.warnLine}>Backup అయ్యే వరకు Close అనుమతించదు.</Text>}
               <TouchableOpacity style={styles.secondaryBtn} onPress={() => navigation.navigate('Reports')}>
-                <Text style={styles.secondaryBtnText}>🗂️ Reports (PDF / Excel) తీసుకోవడానికి వెళ్ళు</Text>
+                <MaterialCommunityIcons name="file-chart-outline" size={18} color={Colors.primary} />
+                <Text style={styles.secondaryBtnText}>Reports (PDF / Excel) తీసుకోవడానికి వెళ్ళు</Text>
               </TouchableOpacity>
               <Text style={styles.small}>Reports తీసుకుని తిరిగి ఇక్కడికి రండి. (ఇది ఐచ్ఛికం, కానీ close తర్వాత ఈ సంవత్సరం reports తీయలేరు.)</Text>
             </Card>
 
-            <Text style={styles.sectionTitle}>2️⃣  Roll Promotion Preview</Text>
+            <SectionHead icon="numeric-2-circle-outline" label="Roll Promotion Preview" />
             {info.plans.length === 0 ? (
               <Card><Text style={styles.small}>Schools లేవు.</Text></Card>
             ) : info.plans.map(p => (
@@ -162,13 +185,18 @@ export default function YearCloseScreen({ navigation }) {
             ))}
             <Text style={styles.small}>Class N కి పాత N−1 roll వస్తుంది. అతి చిన్న class roll అలాగే ఉంటుంది. అతి పెద్ద class roll తొలగిపోతుంది. Close తర్వాత Schools లో సరిచేయవచ్చు. (school పేరు నొక్కితే class వారీగా చూడవచ్చు)</Text>
 
-            <Text style={styles.sectionTitle}>3️⃣  Confirm</Text>
+            <SectionHead icon="numeric-3-circle-outline" label="Confirm" />
             <Card>
               <Text style={styles.small}>కొనసాగడానికి  {CONFIRM_WORD}  అని టైప్ చేయండి</Text>
               <TextInput style={styles.input} value={typed} onChangeText={setTyped} autoCapitalize="characters"
                 autoCorrect={false} placeholder={CONFIRM_WORD} placeholderTextColor={Colors.textMuted} />
               <TouchableOpacity style={[styles.dangerBtn, !canClose && styles.btnOff]} disabled={!canClose} onPress={doClose}>
-                {running ? <ActivityIndicator color="#fff" /> : <Text style={styles.dangerBtnText}>🔒 {info.academicYear} Close చేయి</Text>}
+                {running ? <ActivityIndicator color="#fff" /> : (
+                  <>
+                    <MaterialCommunityIcons name="lock-outline" size={18} color="#fff" />
+                    <Text style={styles.dangerBtnText}>{info.academicYear} Close చేయి</Text>
+                  </>
+                )}
               </TouchableOpacity>
             </Card>
           </>
@@ -185,20 +213,22 @@ const styles = StyleSheet.create({
   centeredBox: { alignItems: 'center', paddingVertical: Spacing.xl },
   backBtn:     { paddingVertical: Spacing.md },
   backBtnText: { fontSize: 16, color: Colors.primary, fontWeight: '600' },
-  sectionTitle: { ...Typography.label, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: Spacing.md, marginBottom: Spacing.xs },
+  sectionRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: Spacing.md, marginBottom: Spacing.xs },
+  sectionTitle: { ...Typography.label, textTransform: 'uppercase', letterSpacing: 0.8, color: Colors.primaryDark, fontWeight: '700' },
   cardTitle: { fontSize: 15, fontWeight: '800', color: Colors.textPrimary, marginBottom: Spacing.xs },
   line:  { fontSize: 13, color: Colors.textPrimary, lineHeight: 20 },
   small: { fontSize: 12, color: Colors.textMuted, marginTop: Spacing.xs },
-  okLine:   { fontSize: 13, color: Colors.success, fontWeight: '700', marginTop: Spacing.sm },
+  okRow:    { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: Spacing.sm },
+  okLine:   { flex: 1, fontSize: 13, color: Colors.success, fontWeight: '700' },
   warnLine: { fontSize: 12, color: Colors.danger, marginTop: Spacing.sm },
-  okCard: { marginBottom: Spacing.sm, backgroundColor: Colors.primaryLight },
-  okText: { fontSize: 13, fontWeight: '700', color: Colors.primary },
+  okCard: { marginBottom: Spacing.sm, backgroundColor: Colors.primaryLight, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  okText: { flex: 1, fontSize: 13, fontWeight: '700', color: Colors.primary },
 
-  primaryBtn:     { backgroundColor: Colors.primary, padding: Spacing.md, borderRadius: Radius.md, alignItems: 'center' },
+  primaryBtn:     { flexDirection: 'row', gap: 8, justifyContent: 'center', backgroundColor: Colors.primary, padding: Spacing.md, borderRadius: Radius.lg, alignItems: 'center' },
   primaryBtnText: { color: Colors.primaryText, fontWeight: '700' },
-  secondaryBtn:   { marginTop: Spacing.sm, backgroundColor: Colors.primaryLight, padding: Spacing.md, borderRadius: Radius.md, alignItems: 'center' },
+  secondaryBtn:   { flexDirection: 'row', gap: 8, justifyContent: 'center', marginTop: Spacing.sm, backgroundColor: Colors.primaryLight, padding: Spacing.md, borderRadius: Radius.lg, alignItems: 'center' },
   secondaryBtnText: { color: Colors.primary, fontWeight: '700', fontSize: 13 },
-  dangerBtn:     { marginTop: Spacing.sm, backgroundColor: Colors.danger, padding: Spacing.md, borderRadius: Radius.md, alignItems: 'center' },
+  dangerBtn:     { flexDirection: 'row', gap: 8, justifyContent: 'center', marginTop: Spacing.sm, backgroundColor: Colors.danger, padding: Spacing.md, borderRadius: Radius.lg, alignItems: 'center' },
   dangerBtnText: { color: '#fff', fontWeight: '800' },
   btnOff: { opacity: 0.4 },
 
@@ -210,7 +240,7 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: Colors.cardBorder, borderRadius: Radius.md, padding: Spacing.md, fontSize: 16, fontWeight: '700',
            color: Colors.textPrimary, backgroundColor: Colors.surface, marginTop: Spacing.xs, textAlign: 'center' },
 
-  emptyEmoji: { fontSize: 52, marginBottom: Spacing.md },
+  emptyIcon:  { marginBottom: Spacing.md },
   emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary, marginBottom: Spacing.xs },
   emptyHint:  { ...Typography.bodySm, textAlign: 'center' },
   retryBtn:     { marginTop: Spacing.md, backgroundColor: Colors.primaryLight, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, borderRadius: Radius.md },

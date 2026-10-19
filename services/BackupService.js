@@ -93,7 +93,7 @@ class BackupService {
     if (!(await Sharing.isAvailableAsync())) {
       throw new Error('ఈ device లో Share అందుబాటులో లేదు.');
     }
-    const fileName = `tprint-backup-${stamp()}.json`;
+    const fileName = `srkvm-backup-${stamp()}.json`;
     const uri      = FileSystem.cacheDirectory + fileName;
     await FileSystem.writeAsStringAsync(uri, JSON.stringify(payload));
     await Sharing.shareAsync(uri, {

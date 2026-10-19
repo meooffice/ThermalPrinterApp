@@ -12,6 +12,7 @@ import SettingsService from './SettingsService';
 import StockService from './StockService';
 import LedgerService from './LedgerService';
 import ReceiptHistory from './ReceiptHistory';
+import { semesterMatches } from './ItemModel';
 import { receivedTotals } from './StockModel';
 import {
   buildStockReport, buildRequirementReport, buildSchoolReport, buildReceiptsReport, buildSelectedSchoolReport,
@@ -43,7 +44,9 @@ class ReportService {
     if (key === 'receipts') {
       report = buildReceiptsReport({ index: await ReceiptHistory.getAll(), academicYear: ay });
     } else {
-      const [items, types] = await Promise.all([CatalogService.getAll(), ItemTypeService.getAll()]);
+      const [allItems, types] = await Promise.all([CatalogService.getAll(), ItemTypeService.getAll()]);
+      const sem = opts.semester ?? null;                                 // Semester filter (null = all items)
+      const items = allItems.filter(i => semesterMatches(i, sem));
       if (key === 'stock') {
         const [entries, given] = await Promise.all([StockService.getAll(), LedgerService.givenTotals(ay)]);
         report = buildStockReport({ items, types, received: receivedTotals(entries, ay), given });
@@ -63,6 +66,7 @@ class ReportService {
       }
     }
     if (!report.rows.length) throw new Error('ఈ report లో చూపడానికి data ఏమీ లేదు.');
+    if (key !== 'receipts' && opts.semester != null) report.title += ` - Semester ${opts.semester}`;
     return {
       report,
       meta: {
@@ -123,7 +127,7 @@ ${report.note ? `<div class="note">${esc(report.note)}</div>` : ''}
       ...(report.note ? [[report.note]] : []),
     ]), 'Info');
     const b64 = write(wb, { type: 'base64', bookType: 'xlsx' });
-    const uri = FileSystem.cacheDirectory + `tprint-${report.key}-${stamp()}.xlsx`;
+    const uri = FileSystem.cacheDirectory + `srkvm-${report.key}-${stamp()}.xlsx`;
     await FileSystem.writeAsStringAsync(uri, b64, { encoding: 'base64' });
     await Sharing.shareAsync(uri, { mimeType: XLSX_MIME, dialogTitle: report.title, UTI: 'org.openxmlformats.spreadsheetml.sheet' });
   }

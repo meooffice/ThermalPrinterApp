@@ -17,6 +17,7 @@ import HistoryScreen from "./screens/HistoryScreen";
 import SettingsScreen from "./screens/SettingsScreen";
 import CatalogScreen from "./screens/CatalogScreen";
 import SchoolScreen from "./screens/SchoolScreen";
+import HelpScreen from "./screens/HelpScreen";
 import FloatingTabBar from "./components/FloatingTabBar";
 import WelcomeSplash from "./components/WelcomeSplash";
 import DriveBackupService from "./services/DriveBackupService";
@@ -63,6 +64,7 @@ function SettingsStack() {
       <Stack.Screen name="SettingsMain" component={SettingsScreen} />
       <Stack.Screen name="Schools" component={SchoolScreen} />
       <Stack.Screen name="Catalog" component={CatalogScreen} />
+      <Stack.Screen name="Help" component={HelpScreen} />
     </Stack.Navigator>
   );
 }
@@ -72,7 +74,7 @@ export default function App() {
 
   // Daily Drive auto-backup (after 7 PM): check on start, when app returns to foreground, and every 5 min while open
   useEffect(() => {
-    DriveBackupService.getMeta().then((m) => BackupReminder.sync(m.enabled)); // keep the 7 PM reminder in step with the switch
+    DriveBackupService.getMeta().then((m) => BackupReminder.sync(m.enabled, m.lastBackupAt)); // keep the 7 PM reminder in step with the switch
     DriveBackupService.runIfDue();
     const sub = AppState.addEventListener("change", (st) => { if (st === "active") DriveBackupService.runIfDue(); });
     const timer = setInterval(() => DriveBackupService.runIfDue(), 5 * 60 * 1000);

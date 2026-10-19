@@ -2,7 +2,7 @@
   "expo": {
     "name": "SRKVM",
     "slug": "thermalprinterapp",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "tprint",
@@ -30,13 +30,6 @@
       ]
     },
     "plugins": [
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "Allow Thermal Printer to access your photos for shop logo.",
-          "cameraPermission": "Allow Thermal Printer to use camera for barcode scanning."
-        }
-      ],
       [
         "expo-camera",
         {
