@@ -11,6 +11,7 @@ import ReceiptHistory from '../services/ReceiptHistory';
 import BluetoothService from '../services/BluetoothService';
 import { buildReceiptBase64 } from '../services/ReceiptPrinter';
 import SettingsService from '../services/SettingsService';
+import ShareService from '../services/ShareService';
 import { Colors, Radius, Spacing, Typography } from '../constants/Theme'; 
 import { Card } from '../components/ui';
 import Hero from '../components/Hero';
@@ -22,6 +23,7 @@ export default function HistoryScreen() {
   const [printing, setPrinting] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [search, setSearch]     = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');   // all | active | cancelled | legacy
 
   useFocusEffect(useCallback(() => { loadHistory(); }, []));
 
@@ -65,6 +67,29 @@ export default function HistoryScreen() {
     );
   };
 
+  // Share an OLD receipt again as an A4 PDF (WhatsApp, Drive, mail ... from the share sheet).
+  // Nothing is issued or saved: same invoice number, original date, marked DUPLICATE COPY.
+  const handleSharePdf = async (entry) => {
+    if (printing) return;
+    try {
+      setPrinting(entry.id);
+      const receipt = await ReceiptHistory.get(entry.id);
+      if (!receipt) { Alert.alert('Failed', 'రశీదు data కనబడలేదు.'); return; }
+      const settings = await SettingsService.get();
+      const items = receipt.items || [];
+      const totalQty = Number(entry.totalQty ?? receipt.totalQty) ||
+        items.reduce((a, i) => a + (parseInt(i.count, 10) || 0), 0);
+      await ShareService.sharePDF({
+        settings, school: receipt.school, spell: receipt.spell || 1, items, totalQty,
+        invoiceNo: receipt.invoiceNo, when: new Date(receipt.savedAt), duplicate: true,
+      });
+    } catch (error) {
+      Alert.alert('Failed', error.message);
+    } finally {
+      setPrinting(null);
+    }
+  };
+
   const handleReprint = async (entry) => {
     if (printing) return;                       // a reprint is already running
     try {
@@ -93,10 +118,20 @@ export default function HistoryScreen() {
   };
 
   const q = search.trim().toLowerCase();
-  const visible = q === '' ? history : history.filter(r =>
+  const statusOf = (r) => (r.status === 'cancelled' ? 'cancelled' : r.legacy ? 'legacy' : 'active');
+  const counts = history.reduce((c, r) => { c[statusOf(r)] += 1; return c; }, { active: 0, cancelled: 0, legacy: 0 });
+  const filters = [
+    { key: 'all', label: 'All', n: history.length },
+    { key: 'active', label: 'Active', n: counts.active },
+    { key: 'cancelled', label: 'Cancelled', n: counts.cancelled },
+    ...(counts.legacy > 0 ? [{ key: 'legacy', label: 'పాత', n: counts.legacy }] : []),
+  ];
+  const matchesText = (r) => q === '' ||
     (r.invoiceNo || '').toLowerCase().includes(q) ||
     (r.schoolName || '').toLowerCase().includes(q) ||
-    (r.udise || '').includes(q));
+    (r.udise || '').includes(q) ||
+    formatDate(r.savedAt).toLowerCase().includes(q);   // the date exactly as shown on the card
+  const visible = history.filter(r => (statusFilter === 'all' || statusOf(r) === statusFilter) && matchesText(r));
 
   const renderItem = ({ item }) => {
     const cancelled = item.status === 'cancelled';
@@ -172,6 +207,12 @@ export default function HistoryScreen() {
                   </View>
                 )}
             </TouchableOpacity>
+            <TouchableOpacity style={styles.reprintBtn} onPress={() => handleSharePdf(item)} disabled={printing !== null}>
+              <View style={styles.actionBtnInner}>
+                <MaterialCommunityIcons name="share-variant-outline" size={16} color={Colors.primary} />
+                <Text style={styles.reprintText}>PDF</Text>
+              </View>
+            </TouchableOpacity>
             {item.legacy ? (
               <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item.id)}>
                 <View style={styles.actionBtnInner}>
@@ -224,7 +265,7 @@ export default function HistoryScreen() {
             <MaterialCommunityIcons name="magnify" size={20} color={Colors.textMuted} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Invoice no. లేదా school పేరు..."
+              placeholder="Invoice no., school పేరు లేదా తేదీ..."
               value={search}
               onChangeText={setSearch}
               placeholderTextColor={Colors.textMuted}
@@ -234,6 +275,21 @@ export default function HistoryScreen() {
                 <MaterialCommunityIcons name="close-circle" size={18} color={Colors.textMuted} />
               </TouchableOpacity>
             )}
+          </View>
+        )}
+
+        {history.length > 0 && (
+          <View style={styles.filterRow}>
+            {filters.map(f => (
+              <TouchableOpacity
+                key={f.key}
+                style={[styles.filterChip, statusFilter === f.key && styles.filterChipOn]}
+                onPress={() => setStatusFilter(f.key)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.filterText, statusFilter === f.key && styles.filterTextOn]}>{f.label} · {f.n}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         )}
 
@@ -313,6 +369,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md, marginBottom: Spacing.sm,
     borderWidth: 0.5, borderColor: Colors.cardBorder, gap: Spacing.sm,
   },
+  filterRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs + 2, marginBottom: Spacing.sm },
+  filterChip:   { paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs + 1, borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.cardBorder, backgroundColor: Colors.surface },
+  filterChipOn: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  filterText:   { fontSize: 12, fontWeight: '700', color: Colors.textSecondary },
+  filterTextOn: { color: Colors.primaryText },
   searchInput: { flex: 1, paddingVertical: Spacing.md, fontSize: 14, color: Colors.textPrimary },
   historyCardCancelled: { opacity: 0.6 },
   chipLegacy:    { backgroundColor: '#FBF3C9' },

@@ -1,6 +1,6 @@
 // services/DriveBackupService.js
 // Automatic backup to the user's Google Drive (hidden appDataFolder). Every backup is a NEW dated file; the newest
-// KEEP_VERSIONS are kept, older ones are deleted. (The old single 'srkvm-backup-latest.json' is just treated as the oldest version.)
+// KEEP_VERSIONS are kept, older ones are deleted. (The old single 'tprint-backup-latest.json' is just treated as the oldest version.)
 // Reuses BackupService.buildPayload / inspect / restore. Never touches existing app data keys.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
@@ -10,10 +10,20 @@ import BackupReminder from './BackupReminder';
 // 👉 Google Cloud Console లో create చేసిన "Web application" OAuth Client ID ఇక్కడ పెట్టండి
 export const WEB_CLIENT_ID = '378761747962-tc6m4cnonmun1ecfinsvo07jtkb09jb0.apps.googleusercontent.com';
 
+// Short fingerprint of the backed-up data (keys sorted), stored with the backup so that later changes can be detected
+const fingerprint = (data) => {
+  let h = 2166136261, len = 0;
+  const feed = (str) => { len += str.length; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } };
+  const keys = Object.keys(data).sort();
+  keys.forEach(k => { feed(k); feed('\u0000'); feed(String(data[k])); feed('\u0001'); });
+  return `${h.toString(16)}:${keys.length}:${len}`;
+};
+
 const META_KEY    = 'drive_backup_meta';            // not included in Backup (not in BackupService key list)
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
-const FILE_PREFIX = 'srkvm-backup-';                // old file: srkvm-backup-latest.json, new files: srkvm-backup-20261016-190000.json
+const FILE_PREFIX = 'srkvm-backup-';                 // files: srkvm-backup-20261016-190000.json
 const FILE_RE     = /^srkvm-backup-.*\.json$/;
+const LEGACY_RE   = /^tprint-backup-.*\.json$/;      // old test-time files (app id 'T-Print'): deleted automatically
 const KEEP_VERSIONS = 15;                           // newest backups kept in Drive
 const API         = 'https://www.googleapis.com/drive/v3';
 const UPLOAD_API  = 'https://www.googleapis.com/upload/drive/v3';
@@ -42,7 +52,7 @@ class DriveBackupService {
 
   async getMeta() {
     const m = parseJSON(await AsyncStorage.getItem(META_KEY));
-    return { enabled: false, email: null, lastBackupAt: null, lastError: null, lastAttemptAt: null, ...(m || {}) };
+    return { enabled: false, email: null, lastBackupAt: null, lastError: null, lastAttemptAt: null, fileBackupAt: null, fileBackupHash: null, ...(m || {}) };
   }
   async setMeta(patch) {
     const m = { ...(await this.getMeta()), ...patch };
@@ -115,7 +125,18 @@ class DriveBackupService {
     const q = encodeURIComponent('trashed=false');
     const res = await this._fetch(`${API}/files?spaces=appDataFolder&q=${q}&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime desc&pageSize=100`);
     const j = await res.json();
-    return (j.files || []).filter(f => FILE_RE.test(f.name || ''));
+    const all = j.files || [];
+    const legacy = all.filter(f => LEGACY_RE.test(f.name || ''));
+    if (legacy.length) await this._purgeLegacy(legacy);
+    return all.filter(f => FILE_RE.test(f.name || ''));
+  }
+
+  // One-time cleanup of old 'tprint-backup-*' files (they cannot be restored any more). Never fails the caller.
+  async _purgeLegacy(legacy) {
+    try {
+      for (const f of legacy) await this._fetch(`${API}/files/${f.id}`, { method: 'DELETE' });
+      await this.setMeta({ lastBackupAt: null, lastBackupHash: null }); // old backup dates no longer exist
+    } catch { /* ignore: next listing tries again */ }
   }
 
   // Newest backup file (null = none)
@@ -183,6 +204,37 @@ class DriveBackupService {
     return true;
   }
 
+  // true if app data differs from the last Drive backup AND from the last file backup (or neither has a fingerprint yet)
+  async hasUnsavedChanges() {
+    try {
+      const m = await this.getMeta();
+      if (!m.lastBackupHash && !m.fileBackupHash) return true;
+      const payload = await BackupService.buildPayload();
+      const fp = fingerprint(payload.data);
+      return fp !== m.lastBackupHash && fp !== m.fileBackupHash;
+    } catch {
+      return false; // never show a false alarm because of a read problem
+    }
+  }
+
+  // After a manual file backup (Settings -> Backup): remember its date + fingerprint (works even when Drive backup is OFF)
+  async markFileBackup() {
+    try {
+      const payload = await BackupService.buildPayload();
+      const at = new Date().toISOString();
+      await this.setMeta({ fileBackupAt: at, fileBackupHash: fingerprint(payload.data) });
+      BackupReminder.onBackedUp(at);
+    } catch { /* ignore */ }
+  }
+
+  // After a restore FROM Drive: current data equals that backup, so it counts as saved
+  async markSynced() {
+    try {
+      const payload = await BackupService.buildPayload();
+      await this.setMeta({ lastBackupHash: fingerprint(payload.data) });
+    } catch { /* ignore */ }
+  }
+
   // ── Backup now ────────────────────────────────────────────────────
   // Returns { summary, at }. Throws on failure (and records lastError).
   backupNow() {
@@ -195,10 +247,11 @@ class DriveBackupService {
           throw new Error('Backup చేయడానికి data ఏమీ లేదు.');
         }
         const { summary } = BackupService.inspect(payload); // same validation as manual backup
+        const fp = fingerprint(payload.data);
         await this._upload(JSON.stringify(payload));
         await this._prune();
         const at = new Date().toISOString();
-        await this.setMeta({ lastBackupAt: at, lastError: null });
+        await this.setMeta({ lastBackupAt: at, lastError: null, lastBackupHash: fp });
         BackupReminder.onBackedUp(at); // today's 7 PM reminder is not needed any more
         return { summary, at };
       } catch (e) {

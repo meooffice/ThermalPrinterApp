@@ -44,7 +44,7 @@ const SCHOOL_SAMPLES = [
   schoolRow('36000000002', 'SAMPLE MPP Primary School', 'PS', 'Sample Village 2', 1, 5, { 1: [8, 7], 2: [9, 6], 3: [7, 8], 4: [10, 9], 5: [6, 7] }),
 ];
 const SCHOOL_NOTES = [
-  'Print · Schools Upload Format',
+  'SRKVM · Schools Upload Format',
   'ఒక school = ఒక row. ఉదాహరణ rows (Schools sheet) నిజమైన data వేసే ముందు తొలగించండి.',
   'UDISE, School Name, Type, MinClass, MaxClass తప్పనిసరి. UDISE unique: ఇదే UDISE ఉన్న school ఉంటే update అవుతుంది, లేకపోతే కొత్తది add అవుతుంది.',
   'Type: FS / PS / UPS / HS / HS+. MinClass, MaxClass: 1–12.',
@@ -69,8 +69,8 @@ async function shareWorkbook(wb, fileName, title) {
 }
 
 const TemplateService = {
-  shareItemsTemplate:   () => shareWorkbook(buildItemsTemplateWorkbook(),   'Items_Template.xlsx',   'Items Template'),
-  shareSchoolsTemplate: () => shareWorkbook(buildSchoolsTemplateWorkbook(), 'Schools_Template.xlsx', 'Schools Template'),
+  shareItemsTemplate:   () => shareWorkbook(buildItemsTemplateWorkbook(),   'SRKVM_Items_Template.xlsx',   'Items Template'),
+  shareSchoolsTemplate: () => shareWorkbook(buildSchoolsTemplateWorkbook(), 'SRKVM_Schools_Template.xlsx', 'Schools Template'),
 };
 
 export default TemplateService;

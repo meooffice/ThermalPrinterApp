@@ -15,6 +15,7 @@ import StockService from '../services/StockService';
 import LedgerService from '../services/LedgerService';
 import { buildStockEntry, receivedTotals, todayISO } from '../services/StockModel';
 import { Colors, Radius, Spacing, Typography } from '../constants/Theme';
+import useFieldScroll from '../components/useFieldScroll';
 import { Card } from '../components/ui';
 import Hero from '../components/Hero';
 import SemesterChips from '../components/SemesterChips';
@@ -33,6 +34,7 @@ function SectionHead({ icon, label }) {
 }
 
 export default function StockScreen({ navigation }) {
+  const fsDetail = useFieldScroll(); // keyboard auto-scroll of the focused field
   const insets = useSafeAreaInsets(); // keep sheet buttons above the Android navigation bar
   const [items, setItems]       = useState([]);
   const [types, setTypes]       = useState([]);
@@ -411,7 +413,7 @@ export default function StockScreen({ navigation }) {
               </Text>
             )}
 
-            <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 120 }}>
+            <ScrollView ref={fsDetail.ref} style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={[{ paddingBottom: 120 }, fsDetail.padStyle]}>
               {/* Add / edit form */}
               <View style={styles.formBox}>
                 <View style={styles.formTitleRow}>
@@ -420,7 +422,7 @@ export default function StockScreen({ navigation }) {
                 </View>
 
                 <Text style={styles.inputLabel}>సంఖ్య *</Text>
-                <TextInput
+                <TextInput onFocus={fsDetail.onFocus}
                   style={styles.input}
                   value={qty}
                   onChangeText={v => setQty(v.replace(/[^0-9]/g, ''))}
@@ -448,7 +450,7 @@ export default function StockScreen({ navigation }) {
                 )}
 
                 <Text style={styles.inputLabel}>తేదీ (YYYY-MM-DD)</Text>
-                <TextInput
+                <TextInput onFocus={fsDetail.onFocus}
                   style={styles.input}
                   value={date}
                   onChangeText={setDate}
@@ -459,7 +461,7 @@ export default function StockScreen({ navigation }) {
                 />
 
                 <Text style={styles.inputLabel}>గమనిక (optional)</Text>
-                <TextInput
+                <TextInput onFocus={fsDetail.onFocus}
                   style={styles.input}
                   value={note}
                   onChangeText={setNote}

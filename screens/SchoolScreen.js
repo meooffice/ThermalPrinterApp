@@ -20,6 +20,7 @@ import TemplateService from '../services/TemplateService';
 import { parseCsvRows } from '../services/ItemModel';
 import { SCHOOL_TYPES, buildSchoolData, rowsToSchools, classRange, rollSummary, parseUdiseEnrolment, udiseToSchools } from '../services/SchoolModel';
 import { Colors, Radius, Spacing, Typography } from '../constants/Theme';
+import useFieldScroll from '../components/useFieldScroll';
 import { Card } from '../components/ui';
 import Hero from '../components/Hero';
 
@@ -38,6 +39,7 @@ function IconText({ icon, size = 12, color = Colors.textMuted, style, children }
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function SchoolScreen({ navigation }) {
+  const fsForm = useFieldScroll(); // keyboard auto-scroll of the focused field
   const insets = useSafeAreaInsets(); // keep sheet buttons above the Android navigation bar
   const [schools, setSchools]         = useState([]);
   const [loading, setLoading]         = useState(true);
@@ -452,9 +454,9 @@ export default function SchoolScreen({ navigation }) {
               <MaterialCommunityIcons name={editSchool ? 'pencil-outline' : 'school-outline'} size={22} color={Colors.primaryDark} />
               <Text style={styles.modalTitle}>{editSchool ? 'Edit School' : 'Add School'}</Text>
             </View>
-            <ScrollView style={styles.sheetScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <ScrollView ref={fsForm.ref} contentContainerStyle={fsForm.padStyle} style={styles.sheetScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <Text style={styles.inputLabel}>School Name *</Text>
-              <TextInput
+              <TextInput onFocus={fsForm.onFocus}
                 style={styles.input}
                 value={form.name}
                 onChangeText={v => setForm({ ...form, name: v })}
@@ -463,7 +465,7 @@ export default function SchoolScreen({ navigation }) {
                 returnKeyType="next"
               />
               <Text style={styles.inputLabel}>UDISE Code</Text>
-              <TextInput
+              <TextInput onFocus={fsForm.onFocus}
                 style={styles.input}
                 value={form.udise}
                 onChangeText={v => setForm({ ...form, udise: v })}
@@ -473,7 +475,7 @@ export default function SchoolScreen({ navigation }) {
                 returnKeyType="next"
               />
               <Text style={styles.inputLabel}>Address</Text>
-              <TextInput
+              <TextInput onFocus={fsForm.onFocus}
                 style={[styles.input, styles.inputMultiline]}
                 value={form.address}
                 onChangeText={v => setForm({ ...form, address: v })}
@@ -497,7 +499,7 @@ export default function SchoolScreen({ navigation }) {
 
               <Text style={styles.inputLabel}>తరగతులు Min – Max</Text>
               <View style={styles.rangeRow}>
-                <TextInput
+                <TextInput onFocus={fsForm.onFocus}
                   style={[styles.input, { flex: 1, marginBottom: 0 }]}
                   value={form.minClass}
                   onChangeText={v => setForm({ ...form, minClass: v.replace(/[^0-9]/g, '') })}
@@ -507,7 +509,7 @@ export default function SchoolScreen({ navigation }) {
                   placeholderTextColor={Colors.textMuted}
                 />
                 <Text style={styles.rangeDash}>–</Text>
-                <TextInput
+                <TextInput onFocus={fsForm.onFocus}
                   style={[styles.input, { flex: 1, marginBottom: 0 }]}
                   value={form.maxClass}
                   onChangeText={v => setForm({ ...form, maxClass: v.replace(/[^0-9]/g, '') })}
@@ -535,14 +537,14 @@ export default function SchoolScreen({ navigation }) {
                   {rollClasses.map(cl => (
                     <View key={cl} style={styles.rollRow}>
                       <Text style={styles.rollClass}>{cl}</Text>
-                      <TextInput
+                      <TextInput onFocus={fsForm.onFocus}
                         style={styles.rollInput}
                         value={String(form.roll?.[cl]?.b ?? '')}
                         onChangeText={v => setRoll(cl, 'b', v)}
                         keyboardType="numeric" maxLength={3} placeholder="0"
                         placeholderTextColor={Colors.textMuted}
                       />
-                      <TextInput
+                      <TextInput onFocus={fsForm.onFocus}
                         style={styles.rollInput}
                         value={String(form.roll?.[cl]?.g ?? '')}
                         onChangeText={v => setRoll(cl, 'g', v)}

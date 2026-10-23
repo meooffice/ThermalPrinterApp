@@ -17,6 +17,7 @@ import ItemTypeService from '../services/ItemTypeService';
 import TemplateService from '../services/TemplateService';
 import { buildItemData, SUBTYPES, SUBTYPE_LABEL, effectiveClasses, formatSizes, parseSizes, parseCsvRows, rowsToItems } from '../services/ItemModel';
 import { Colors, Radius, Spacing, Typography } from '../constants/Theme';
+import useFieldScroll from '../components/useFieldScroll';
 import { Card } from '../components/ui';
 import Hero from '../components/Hero';
 import { itemIconName } from '../components/itemIcon';
@@ -40,6 +41,7 @@ function IconText({ icon, size = 12, color = Colors.textMuted, style, children }
 }
 
 export default function CatalogScreen({ navigation }) {
+  const fsForm = useFieldScroll(); // keyboard auto-scroll of the focused field
   const insets = useSafeAreaInsets(); // keep sheet buttons above the Android navigation bar
   const [items, setItems]               = useState([]);
   const [loading, setLoading]           = useState(true);
@@ -398,9 +400,9 @@ export default function CatalogScreen({ navigation }) {
               <Text style={styles.modalTitle}>{editItem ? 'Edit Item' : 'Add Item'}</Text>
             </View>
 
-            <ScrollView style={styles.sheetScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <ScrollView ref={fsForm.ref} contentContainerStyle={fsForm.padStyle} style={styles.sheetScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <Text style={styles.inputLabel}>Item Name *</Text>
-              <TextInput
+              <TextInput onFocus={fsForm.onFocus}
                 style={styles.input}
                 value={form.name}
                 onChangeText={v => setForm({ ...form, name: v })}
@@ -446,7 +448,7 @@ export default function CatalogScreen({ navigation }) {
               )}
 
               <Text style={styles.inputLabel}>Code (optional, unique)</Text>
-              <TextInput
+              <TextInput onFocus={fsForm.onFocus}
                 style={styles.input}
                 value={form.code}
                 onChangeText={v => setForm({ ...form, code: v })}
@@ -472,7 +474,7 @@ export default function CatalogScreen({ navigation }) {
 
               <Text style={styles.inputLabel}>తరగతి From – To (ఖాళీ = school లోని అన్ని తరగతులు)</Text>
               <View style={styles.barcodeRow}>
-                <TextInput
+                <TextInput onFocus={fsForm.onFocus}
                   style={[styles.input, { flex: 1, marginBottom: 0 }]}
                   value={form.classFrom}
                   onChangeText={v => setForm({ ...form, classFrom: v.replace(/[^0-9]/g, '') })}
@@ -482,7 +484,7 @@ export default function CatalogScreen({ navigation }) {
                   placeholderTextColor={Colors.textMuted}
                 />
                 <Text style={styles.rangeDash}>–</Text>
-                <TextInput
+                <TextInput onFocus={fsForm.onFocus}
                   style={[styles.input, { flex: 1, marginBottom: 0 }]}
                   value={form.classTo}
                   onChangeText={v => setForm({ ...form, classTo: v.replace(/[^0-9]/g, '') })}
@@ -494,7 +496,7 @@ export default function CatalogScreen({ navigation }) {
               </View>
 
               <Text style={styles.inputLabel}>Semester (optional, 1-4)</Text>
-              <TextInput
+              <TextInput onFocus={fsForm.onFocus}
                 style={styles.input}
                 value={form.semester}
                 onChangeText={v => setForm({ ...form, semester: v.replace(/[^0-9]/g, '') })}
@@ -505,7 +507,7 @@ export default function CatalogScreen({ navigation }) {
               />
 
               <Text style={styles.inputLabel}>Sizes (optional)</Text>
-              <TextInput
+              <TextInput onFocus={fsForm.onFocus}
                 style={[styles.input, { marginBottom: Spacing.xs }]}
                 value={form.sizesText}
                 onChangeText={v => setForm({ ...form, sizesText: v })}
@@ -536,7 +538,7 @@ export default function CatalogScreen({ navigation }) {
                     {normClasses.map(cl => (
                       <View key={cl} style={styles.normCell}>
                         <Text style={styles.normClass}>తరగతి {cl}</Text>
-                        <TextInput
+                        <TextInput onFocus={fsForm.onFocus}
                           style={styles.normInput}
                           value={String((form.norms || {})[cl] ?? '')}
                           onChangeText={v => setForm({ ...form, norms: { ...form.norms, [cl]: v.replace(/[^0-9]/g, '') } })}
@@ -553,7 +555,7 @@ export default function CatalogScreen({ navigation }) {
 
               <Text style={styles.inputLabel}>Barcode (optional)</Text>
               <View style={styles.barcodeRow}>
-                <TextInput
+                <TextInput onFocus={fsForm.onFocus}
                   style={[styles.input, { flex: 1, marginBottom: 0 }]}
                   value={form.barcode}
                   onChangeText={v => setForm({ ...form, barcode: v })}

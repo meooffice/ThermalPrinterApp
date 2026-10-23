@@ -33,8 +33,8 @@ export const DEFAULT_ITEM_ROWS = [
   ["UNI-G-10", "Uniform Cl10 Girls", "Kits", "Girls", 10, 10],
   ["DICT-PIC", "Dict Pictorial", "Kits", "Common", 1, 1],
   ["DICT-OXF", "Dict Oxford", "Kits", "Common", 6, 6],
-  ["SHOE-B", "Boys Shoes", "Shoes", "Boys", "", "", "", "15-32"],
-  ["SHOE-G", "Girls Shoes", "Shoes", "Girls", "", "", "", "15-32"],
+  ["SHOE-B", "Shoes Boys", "Shoes", "Boys", "", "", "", "15-32"],
+  ["SHOE-G", "Shoes Girls", "Shoes", "Girls", "", "", "", "15-32"],
   ["NB-UNRULED", "Notebook UnRuled", "Notebooks", "Common", 6, 10, "", "", "", "", "", "", "", "", 3, 3, 4, 5, 6],
   ["NB-SINGLE", "Notebook SingleRule", "Notebooks", "Common", 6, 10, "", "", "", "", "", "", "", "", 4, 4, 4, 5, 6],
   ["NB-BROAD", "Notebook BroadRuled", "Notebooks", "Common", 6, 10, "", "", "", "", "", "", "", "", 1, 1, 1, 1, 1],
@@ -129,7 +129,7 @@ export const DEFAULT_ITEM_ROWS = [
 
 // Text of the "Instructions" sheet of the template (rows of up to 4 cells)
 export const DEFAULT_ITEM_INSTRUCTIONS = [
-  ["T-Print · Items Upload Format", "", "", ""],
+  ["SRKVM · Items Upload Format", "", "", ""],
   ["ఒక item = ఒక row. మొదటి sheet \"Items\" లో data నింపండి. ఎరుపు heading ఉన్న columns తప్పనిసరి.", "", "", ""],
   ["ఇందులో ఉన్న rows (Bags, Belts, Uniforms, Dictionaries, Shoes) నేరుగా upload చేయవచ్చు. ఇతర items కోసం కొత్త rows చేర్చండి.", "", "", ""],
   ["", "", "", ""],

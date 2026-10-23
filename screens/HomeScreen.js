@@ -11,6 +11,9 @@ import BluetoothService from '../services/BluetoothService';
 import SettingsService from '../services/SettingsService';
 import SchoolService from '../services/SchoolService';
 import CatalogService from '../services/CatalogService';
+import StockService from '../services/StockService';
+import LedgerService from '../services/LedgerService';
+import { receivedTotals } from '../services/StockModel';
 import EscPosEncoder from '../services/EscPosEncoder';
 import { Colors, Radius, Spacing, Typography } from '../constants/Theme';
 import { Card } from '../components/ui';
@@ -33,11 +36,13 @@ export default function HomeScreen({ navigation }) {
   const [testing, setTesting]       = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [info, setInfo]             = useState({ mandal: '', year: '', schools: null, items: null });
+  const [stockAlert, setStockAlert] = useState(null);   // null = nothing to warn about
 
   useFocusEffect(useCallback(() => {
     (async () => {
       await checkConnection();
       loadInfo();
+      loadStockAlert();
       // App just started and no printer: one silent try to the last printer
       if (!autoReconnectTried && !(await BluetoothService.isConnected())) {
         autoReconnectTried = true;
@@ -55,6 +60,22 @@ export default function HomeScreen({ navigation }) {
       const [s, sc, it] = await Promise.all([SettingsService.get(), SchoolService.getAll(), CatalogService.getAll()]);
       setInfo({ mandal: s?.shopName || '', year: s?.academicYear || '', schools: sc.length, items: it.length });
     } catch { /* ignore */ }
+  };
+
+  // Stock warning (read-only): items whose Balance (Received - Given) is below zero, and items with no stock entered yet.
+  // Same numbers as the Stock screen. A failure just hides the card.
+  const loadStockAlert = async () => {
+    try {
+      const s = await SettingsService.get();
+      const year = s?.academicYear;
+      const [its, ents, given] = await Promise.all([CatalogService.getAll(), StockService.getAll(), LedgerService.givenTotals(year)]);
+      const rec = receivedTotals(ents, year).byItem;
+      const giv = (given && given.byItem) || {};
+      const negative = its.filter(i => (rec[i.id] || 0) - (giv[i.id] || 0) < 0).map(i => i.name);
+      const anyStock = its.some(i => (rec[i.id] || 0) > 0);
+      const noStock = anyStock ? its.filter(i => (rec[i.id] || 0) === 0).length : 0;   // before any stock is entered this would only be noise
+      setStockAlert(negative.length || noStock ? { negative, noStock } : null);
+    } catch { setStockAlert(null); }
   };
 
   const hour = new Date().getHours();
@@ -118,8 +139,8 @@ export default function HomeScreen({ navigation }) {
   };
 
   const DATA_TILES = [
-    { title: 'Schools',    sub: 'Add · Upload',       icon: 'school-outline',         tone: TONE.green, onPress: () => navigation.navigate('Settings', { screen: 'Schools' }) },
-    { title: 'Items',      sub: 'Add · Upload',       icon: 'bag-personal-outline',   tone: TONE.gold,  onPress: () => navigation.navigate('Settings', { screen: 'Catalog' }) },
+    { title: 'Schools',    sub: 'Add · Upload',       icon: 'school-outline',         tone: TONE.green, onPress: () => navigation.navigate('Schools') },
+    { title: 'Items',      sub: 'Add · Upload',       icon: 'bag-personal-outline',   tone: TONE.gold,  onPress: () => navigation.navigate('Catalog') },
     { title: 'Stock',      sub: 'Received · Balance', icon: 'package-variant-closed', tone: TONE.sage,  onPress: () => navigation.navigate('Stock') },
     { title: 'Defficit',   sub: 'Requirement',        icon: 'trending-down',          tone: TONE.sage,  onPress: () => navigation.navigate('Requirement') },
     { title: 'Reports',    sub: 'PDF · Excel',        icon: 'file-chart-outline',     tone: TONE.green, onPress: () => navigation.navigate('Reports') },
@@ -133,7 +154,7 @@ export default function HomeScreen({ navigation }) {
           <View style={styles.heroBlob} />
           <Text style={styles.heroGreeting}>{greeting}</Text>
           <Text style={styles.heroTitle}>SRKVM Kit Distribution</Text>
-          <Text style={styles.heroSub}>{info.mandal ? `${info.mandal} Mandal` : 'T-Print'}</Text>
+          <Text style={styles.heroSub}>{info.mandal ? `${info.mandal} Mandal` : 'SRKVM'}</Text>
 
         <View style={styles.heroStats}>
           <View style={styles.heroStat}>
@@ -183,6 +204,37 @@ export default function HomeScreen({ navigation }) {
               </TouchableOpacity>
             )}
           </View>
+
+          {/* ── Stock warning ── */}
+          {stockAlert && (
+            <TouchableOpacity
+              style={[styles.stockCard, stockAlert.negative.length ? styles.stockBad : styles.stockWarn]}
+              onPress={() => navigation.navigate('Stock')}
+              activeOpacity={0.85}
+            >
+              <MaterialCommunityIcons
+                name="alert-circle-outline"
+                size={26}
+                color={stockAlert.negative.length ? Colors.danger : Colors.highlightText}
+              />
+              <View style={{ flex: 1 }}>
+                {stockAlert.negative.length > 0 && (
+                  <>
+                    <Text style={styles.stockTitle}>{stockAlert.negative.length} items లో Balance ఋణం (−)</Text>
+                    <Text style={styles.stockSub} numberOfLines={2}>
+                      {stockAlert.negative.slice(0, 3).join(', ')}{stockAlert.negative.length > 3 ? ` +${stockAlert.negative.length - 3}` : ''}
+                    </Text>
+                  </>
+                )}
+                {stockAlert.noStock > 0 && (
+                  <Text style={[styles.stockSub, stockAlert.negative.length > 0 && { marginTop: 4 }]}>
+                    {stockAlert.noStock} items కు stock నమోదు కాలేదు
+                  </Text>
+                )}
+              </View>
+              <MaterialCommunityIcons name="chevron-right" size={22} color={Colors.textMuted} />
+            </TouchableOpacity>
+          )}
 
           {/* ── Quick Actions ── */}
           <SectionHead icon="lightning-bolt" label="Quick Actions" />
@@ -239,18 +291,24 @@ export default function HomeScreen({ navigation }) {
           <SectionHead icon="lightbulb-on-outline" label="Quick Guide" />
           <Card>
             {[
-              { step: '1', icon: 'folder-upload-outline', text: 'Schools & Items Excel upload చేయండి (Items / Schools screen లోని Template తో)' },
-              { step: '2', icon: 'printer-wireless', text: 'Printer connect చేయండి' },
-              { step: '3', icon: 'receipt-text-outline', text: 'Receipt tab లో school select చేయండి' },
-              { step: '4', icon: 'check-circle-outline', text: 'Roll సరిచూసి Proceed నొక్కి, Items tick చేసి print చేయండి' },
+              { step: '1', icon: 'folder-upload-outline', title: 'Schools & Items upload', sub: 'Items / Schools screen లోని Template తో Excel upload చేయండి' },
+              { step: '2', icon: 'printer-wireless', title: 'Printer connect', sub: 'Bluetooth printer ను జత చేయండి' },
+              { step: '3', icon: 'receipt-text-outline', title: 'School ఎంచుకోండి', sub: 'Receipt tab లో school select చేసి Roll చూడండి' },
+              { step: '4', icon: 'filter-variant', title: 'Item Types ఎంచుకోండి', sub: 'Prime Textbook, HS Text Books, Kits, Shoes… ఈ receipt కి కావలసినవి tick (Textbooks కి Semester)' },
+              { step: '5', icon: 'check-circle-outline', title: 'Items tick చేసి print', sub: 'సంఖ్య సరిచూసి Print నొక్కండి' },
             ].map((item, idx, arr) => (
               <View key={item.step}>
                 <View style={styles.guideRow}>
-                  <View style={styles.guideStepBubble}>
-                    <Text style={styles.guideStep}>{item.step}</Text>
+                  <View style={styles.guideIconWrap}>
+                    <MaterialCommunityIcons name={item.icon} size={20} color={Colors.primary} />
+                    <View style={styles.guideStepBubble}>
+                      <Text style={styles.guideStep}>{item.step}</Text>
+                    </View>
                   </View>
-                  <MaterialCommunityIcons name={item.icon} size={18} color={Colors.accent} />
-                  <Text style={styles.guideText}>{item.text}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.guideTitle}>{item.title}</Text>
+                    <Text style={styles.guideText}>{item.sub}</Text>
+                  </View>
                 </View>
                 {idx < arr.length - 1 && <View style={styles.rowDivider} />}
               </View>
@@ -279,7 +337,7 @@ const styles = StyleSheet.create({
   hero:          { backgroundColor: Colors.primary, paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.lg, borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden' },
   heroBlob:      { position: 'absolute', width: 220, height: 220, borderRadius: 110, backgroundColor: 'rgba(255,255,255,0.08)', top: -70, right: -60 },
   heroGreeting:  { fontSize: 12, color: 'rgba(255,255,255,0.8)', fontWeight: '500' },
-  heroTitle:     { fontSize: 22, fontWeight: '800', color: '#fff', marginTop: 4 },
+  heroTitle:     { fontSize: 22, fontWeight: '800', color: Colors.primaryText, marginTop: 4 },
   heroSub:       { fontSize: 13, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
   heroStats:     { marginTop: Spacing.md, flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.surface, borderRadius: Radius.xl, paddingVertical: Spacing.md, elevation: 0 },
   heroStat:      { flex: 1, alignItems: 'center' },
@@ -289,6 +347,11 @@ const styles = StyleSheet.create({
 
   // Printer card
   printerCard: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, padding: Spacing.md, borderRadius: Radius.xl, borderWidth: 1 },
+  stockCard:   { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.md, borderRadius: Radius.xl, borderWidth: 1 },
+  stockBad:    { backgroundColor: Colors.dangerBg, borderColor: Colors.danger },
+  stockWarn:   { backgroundColor: Colors.warm, borderColor: Colors.cardBorder },
+  stockTitle:  { fontSize: 13, fontWeight: '800', color: Colors.textPrimary },
+  stockSub:    { fontSize: 11, color: Colors.textSecondary, marginTop: 2 },
   printerOn:   { backgroundColor: Colors.successBg, borderColor: Colors.accent },
   printerOff:  { backgroundColor: Colors.dangerBg, borderColor: '#fca5a5' },
   printerDot:  { width: 10, height: 10, borderRadius: 5 },
@@ -329,8 +392,10 @@ const styles = StyleSheet.create({
   tileSub:   { fontSize: 10, color: Colors.textMuted, marginTop: 1, textAlign: 'center' },
 
   // Guide
-  guideRow:        { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.sm },
-  guideStepBubble: { width: 22, height: 22, backgroundColor: Colors.primary, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center' },
-  guideStep:       { fontSize: 11, fontWeight: '700', color: Colors.primaryText, lineHeight: 14 },
-  guideText:       { fontSize: 12, color: Colors.textAccent, flex: 1 },
+  guideRow:        { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, paddingVertical: Spacing.sm },
+  guideIconWrap:   { width: 42, height: 42, borderRadius: Radius.full, backgroundColor: Colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
+  guideStepBubble: { position: 'absolute', top: -4, left: -4, width: 18, height: 18, backgroundColor: Colors.primary, borderRadius: Radius.full, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: Colors.surface },
+  guideStep:       { fontSize: 10, fontWeight: '800', color: Colors.primaryText, lineHeight: 13 },
+  guideTitle:      { fontSize: 14, fontWeight: '700', color: Colors.textPrimary },
+  guideText:       { fontSize: 12, color: Colors.textMuted, marginTop: 1, lineHeight: 17 },
 });

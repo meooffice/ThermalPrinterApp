@@ -7,7 +7,7 @@ import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import MigrationService, { MIGRATION_FLAG, MIGRATION_3A_FLAG } from './MigrationService';
 
-const APP_ID         = 'T-Print';
+const APP_ID         = 'SRKVM';
 const BACKUP_VERSION = 1;
 
 // Existing keys. Add future keys here (or a new prefix) so they are included automatically.
@@ -37,7 +37,7 @@ function summarize(data) {
 
 function validate(payload) {
   if (!payload || typeof payload !== 'object' || payload.app !== APP_ID) {
-    throw new Error('ఇది T-Print backup file కాదు.');
+    throw new Error('ఇది SRKVM backup file కాదు.');
   }
   if (typeof payload.version !== 'number' || payload.version > BACKUP_VERSION) {
     throw new Error('ఈ backup కొత్త versionది. యాప్ ను update చేయండి.');
@@ -98,7 +98,7 @@ class BackupService {
     await FileSystem.writeAsStringAsync(uri, JSON.stringify(payload));
     await Sharing.shareAsync(uri, {
       mimeType: 'application/json',
-      dialogTitle: 'T-Print Backup Save చేయండి',
+      dialogTitle: 'SRKVM Backup Save చేయండి',
       UTI: 'public.json',
     });
     return { fileName, summary };

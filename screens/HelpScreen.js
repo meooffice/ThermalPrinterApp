@@ -26,8 +26,9 @@ const GUIDE = [
     steps: [
       'School ఎంచుకోండి.',
       'Roll (పిల్లల సంఖ్య) నమోదు చేయండి.',
+      'ఏ Item Types (Prime Textbook, HS Text Books, Kits, Shoes, Notebooks…) ఈ receipt లో కావాలో tick చేయండి. ఈ school కి వర్తించేవి ముందే tick అవుతాయి. Textbooks ఉంటే Semester అడుగుతుంది. పైన "మార్చు" తో తర్వాత మార్చవచ్చు.',
       'ఇచ్చే items ని tick చేసి సంఖ్య ఇవ్వండి. Sizes ఉన్న items కు size వారీగా సంఖ్య ఇవ్వండి.',
-      'Print నొక్కితే thermal printer లో వస్తుంది. PDF లేదా System Print తో A4 లో కూడా తీయవచ్చు (ఒక పేజీలో రెండు A5 copies).',
+      'Print నొక్కితే thermal printer లో వస్తుంది. PDF లేదా System Print తో A4 లో కూడా తీయవచ్చు (ఒక పేజీలో రెండు A5 copies). PDF నొక్కితే share sheet లో WhatsApp, Drive, Mail ఎంచుకుని పంపవచ్చు.',
     ],
     tip: 'ఇప్పటికే ఇచ్చినవి లెక్కలో ఉంటాయి. Semester ఎంచుకుంటే ఆ Semester items మాత్రమే కనిపిస్తాయి. Return, ఇచ్చినదాని కంటే ఎక్కువ ఇవ్వలేరు.',
   },
@@ -37,6 +38,7 @@ const GUIDE = [
     steps: [
       'ప్రతి రశీదు కార్డులో school, invoice number కనిపిస్తాయి.',
       'Printer connect అయి ఉంటే Reprint నొక్కి మళ్ళీ print చేయవచ్చు.',
+      'PDF బటన్ నొక్కితే ఆ రశీదును WhatsApp, Drive మొదలైన వాటికి మళ్ళీ పంపవచ్చు. కొత్త invoice రాదు, పాత తేదీతో "DUPLICATE COPY" అని వస్తుంది.',
       'తప్పు రశీదును Cancel చేయవచ్చు. అది జాబితాలోనే ఉంటుంది కానీ లెక్కలోకి రాదు, తిరిగి మార్చలేరు.',
       'పాత (legacy) రశీదులను మాత్రమే Delete చేయవచ్చు.',
     ],
@@ -52,10 +54,10 @@ const GUIDE = [
     ],
   },
   {
-    id: 'req', icon: 'chart-line-variant', title: 'Defficit & Requirement', where: 'Home → కొరత',
+    id: 'req', icon: 'chart-line-variant', title: 'Requirement & కొరత', where: 'Home → కొరత',
     what: 'Schools roll ప్రకారం కావలసిన items, వచ్చిన stock తో పోల్చి కొరత చూపిస్తుంది. ఇక్కడ మార్పులు చేయలేరు, చూడటానికి మాత్రమే.',
     steps: [
-      'Home లో Defficit నొక్కండి.',
+      'Home లో కొరత నొక్కండి.',
       'ప్రతి item కు Required, Received, కొరత చూడండి.',
       'Semester chips తో Semester వారీగా చూడండి.',
       'Roll లేని schools ఉంటే హెచ్చరిక వస్తుంది. Schools లో roll నమోదు చేయండి.',
@@ -119,7 +121,6 @@ const GUIDE = [
       'చివరి 15 backups Drive లో ఉంటాయి. Drive Restore లో ఏ తేదీది కావాలో ఎంచుకోవచ్చు.',
       'Restore చేసే ముందు ప్రస్తుత data కూడా Drive లో భద్రపరుస్తుంది.',
       'రోజూ 7 PM కి reminder notification వస్తుంది. ఆ రోజు backup అయి ఉంటే రాదు.',
-      'Drive Backup fecility కావాలి అంటే మీ gmial-idతో splpdevelopers@gmail.com ని సంప్రదించండి.',
     ],
     tip: 'Notification రావాలంటే Android లో notification permission ఇవ్వాలి.',
   },

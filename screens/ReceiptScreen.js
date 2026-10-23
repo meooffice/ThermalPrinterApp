@@ -26,6 +26,7 @@ import LedgerService from '../services/LedgerService';
 import { requiredForSchool, rollConflicts } from '../services/RequirementModel';
 import { rollSummary, classRange, buildSchoolData } from '../services/SchoolModel';
 import { Colors, Radius, Spacing, Typography } from '../constants/Theme';
+import useFieldScroll from '../components/useFieldScroll';
 import { Card, Stepper } from '../components/ui';
 import Hero from '../components/Hero';
 
@@ -68,8 +69,13 @@ const semOf = (it) => {
   return Number.isFinite(n) && n > 0 ? n : null;
 };
 
+// Receipt filter by Item Type (Prime Textbook, HS Text Books, Kits, Shoes, Notebooks, Others ...): only the chosen types are shown
+const catOf = (it) => (it && it.category) || 'Others';
+
 // ─── Component // ─── Component // ─── Component ───────────────────────────────────────────────────────────────
 export default function ReceiptScreen({ navigation }) {
+  const fsRoll = useFieldScroll(); // keyboard auto-scroll of the focused field
+  const fsSize = useFieldScroll(); // keyboard auto-scroll of the focused field
   const insets = useSafeAreaInsets();
   const sheetPad = { paddingBottom: Spacing.xl + insets.bottom };   // keep bottom sheet buttons above the Android nav bar
   const [settings, setSettings]             = useState(null);
@@ -103,9 +109,18 @@ export default function ReceiptScreen({ navigation }) {
 
   const [semester, setSemester]           = useState(null);    // Semester chosen for this receipt (null = not chosen yet / not needed)
   const [semModal, setSemModal]             = useState(false);   // "which Semester?" popup
+  const [kinds, setKinds]                 = useState(null);    // chosen Item Type names for this receipt (null = not chosen / no filter)
+  const [kindModal, setKindModal]           = useState(false);   // "which Item Types?" popup
+  const [kindDraft, setKindDraft]           = useState([]);      // selection being edited in that popup
   const semMap = {};                                              // itemId -> Semester number (or null)
   catalog.forEach(c => { semMap[c.id] = semOf(c); });
   const semList = [...new Set(catalog.map(semOf).filter(n => n !== null))].sort((a, b) => a - b);
+  const kindsPresent = [...new Set(catalog.map(catOf))].sort((a, b) => {   // Item Types that have items, in the Item Types order
+    const ia = types.indexOf(a), ib = types.indexOf(b);
+    return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+  });
+  // Does any of the given Item Types have Semester books? (then the Semester is asked)
+  const needsSem = (sel) => semList.length > 1 && catalog.some(c => (sel === null || sel.includes(catOf(c))) && semOf(c) !== null);
 
   useFocusEffect(useCallback(() => {
     loadData();
@@ -131,9 +146,10 @@ export default function ReceiptScreen({ navigation }) {
     setSchoolModal(false);
     setSchoolSearch('');
     setLoadingSchool(true);
-    if (!opts.silent) { setShowAll(false); setRollConfirmed(false); setRollEdit(false); setSemester(null); }
+    if (!opts.silent) { setShowAll(false); setRollConfirmed(false); setRollEdit(false); setSemester(null); setKinds(null); }
     // Semester in force for this checklist: given by chooseSemester, kept on a silent refresh, none for a new school
     const activeSem = opts.semester !== undefined ? opts.semester : (opts.silent ? semester : null);
+    const activeKinds = opts.kinds !== undefined ? opts.kinds : (opts.silent ? kinds : null);   // same idea for Textbooks / Kits / Shoes
 
     const rolled = rollSummary(school).total > 0;
     let given = {}, receiptCount = null, avail = null, givenBySize = {}, availBySize = {};
@@ -163,7 +179,8 @@ export default function ReceiptScreen({ navigation }) {
       const hasStock = stockLeft === null || stockLeft > 0;
       const sized = Array.isArray(catItem.sizes) && catItem.sizes.length > 0;   // e.g. Shoes: given size-wise through a popup
       const cs = semOf(catItem);
-      const semHidden = activeSem !== null && cs !== null && cs !== activeSem;   // other Semester's book: not in this receipt
+      const kindHidden = activeKinds !== null && !activeKinds.includes(catOf(catItem));   // Item Type not chosen: not in this receipt
+      const semHidden = kindHidden || (activeSem !== null && cs !== null && cs !== activeSem);   // other Semester's book / unchosen kind: not in this receipt
       return {
         id:       catItem.id,
         name:     catItem.name,
@@ -195,16 +212,54 @@ export default function ReceiptScreen({ navigation }) {
   // With a roll: only items that apply to this school (or already given / selected) unless "show all" is on
   // Items of the other Semester are never shown (items without a Semester always are)
   const semOk = (i) => semester === null || semMap[i.id] == null || semMap[i.id] === semester;
+  const kindOk = (i) => kinds === null || kinds.includes(catOf(i));
   const isVisible = (i) =>
-    semOk(i) && (!hasRoll || showAll || i.checked || (plan[i.id]?.required || 0) > 0 || (plan[i.id]?.given || 0) > 0);
+    semOk(i) && kindOk(i) && (!hasRoll || showAll || i.checked || (plan[i.id]?.required || 0) > 0 || (plan[i.id]?.given || 0) > 0);
 
   // ── Roll popup (shown after choosing a school) ───────────────────────────
-  const proceedWithRoll = () => {
+  const proceedWithRoll = (school = selectedSchool) => {   // school: pass the just-saved school (state may not be updated yet)
     setRollPopup(false);
     setRollEdit(false);
-    // Books of Semester 1 and 2 are never mixed in one receipt: ask which one first
-    if (semList.length > 1 && semester === null) { setSemModal(true); return; }
+    // Which kinds of items (Textbooks / Kits / Shoes) does this receipt have? Asked first when the catalog has more than one kind
+    if (kindsPresent.length > 1 && kinds === null) {
+      // pre-tick the Item Types that apply to this school (roll classes); no roll or nothing applies = all
+      const applies = (cat) => catalog.some(c => catOf(c) === cat && requiredForSchool(c, school) > 0);
+      const pre = school && rollSummary(school).total > 0 ? kindsPresent.filter(applies) : kindsPresent;
+      setKindDraft(pre.length > 0 ? pre : kindsPresent);
+      setKindModal(true);
+      return;
+    }
+    // Books of Semester 1 and 2 are never mixed in one receipt: ask which one first (only when the chosen Item Types have Semester books)
+    if (semester === null && needsSem(kinds)) { setSemModal(true); return; }
     setRollConfirmed(true);
+  };
+
+  // Applies the chosen Item Types: rebuilds the checklist (unchosen types are left out); asks the Semester if needed
+  const applyKinds = async (sel) => {
+    setKindModal(false);
+    setKinds(sel);
+    if (semester === null && needsSem(sel)) { setRollConfirmed(false); setSemModal(true); return; }
+    try {
+      await selectSchool(selectedSchool, { silent: true, kinds: sel });
+      setRollConfirmed(true);
+    } catch (e) {
+      Alert.alert('Items', e.message);
+    }
+  };
+
+  const confirmKinds = () => {
+    const sel = kindsPresent.filter(k => kindDraft.includes(k));
+    if (sel.length === 0) return;
+    const same = kinds !== null && sel.length === kinds.length && sel.every(k => kinds.includes(k));
+    if (same) { setKindModal(false); return; }
+    if (kinds !== null && checkedItems.length > 0) {
+      Alert.alert('Items మారుస్తారా?', `ఇప్పుడు tick చేసిన ${checkedItems.length} items తొలగిపోతాయి.`, [
+        { text: 'వెనక్కి', style: 'cancel' },
+        { text: 'మార్చు', onPress: () => applyKinds(sel) },
+      ]);
+      return;
+    }
+    applyKinds(sel);
   };
 
   // Rebuilds the checklist for the chosen Semester (the other Semester's books are left out), then shows the items
@@ -212,7 +267,7 @@ export default function ReceiptScreen({ navigation }) {
     setSemModal(false);
     setSemester(n);
     try {
-      await selectSchool(selectedSchool, { silent: true, semester: n });
+      await selectSchool(selectedSchool, { silent: true, semester: n, kinds });
       setRollConfirmed(true);
     } catch (e) {
       Alert.alert('Semester', e.message);
@@ -259,7 +314,7 @@ export default function ReceiptScreen({ navigation }) {
         setSchools(await SchoolService.getAll());
         const updated = { ...selectedSchool, roll: built.data.roll };
         await selectSchool(updated, { silent: true });
-        proceedWithRoll();
+        proceedWithRoll(updated);
       } catch (e) {
         Alert.alert('Save కాలేదు', e.message);
       } finally {
@@ -658,7 +713,12 @@ export default function ReceiptScreen({ navigation }) {
           </TouchableOpacity>
         ) : (
           <>
-          {semList.length > 1 && semester !== null ? (
+          {kinds !== null && kindsPresent.length > 1 ? (
+            <TouchableOpacity onPress={() => { setKindDraft(kinds); setKindModal(true); }}>
+              <IconText icon="filter-variant" size={16} style={styles.planToggle}>{`${kinds.length <= 3 ? kinds.join(' + ') : `${kinds.length} Item Types`}  ·  మార్చు`}</IconText>
+            </TouchableOpacity>
+          ) : null}
+          {semList.length > 1 && semester !== null && needsSem(kinds) ? (
             <TouchableOpacity onPress={() => setSemModal(true)}>
               <IconText icon="book-open-page-variant-outline" size={16} style={styles.planToggle}>{`Semester ${semester}  ·  మార్చు`}</IconText>
             </TouchableOpacity>
@@ -811,15 +871,15 @@ export default function ReceiptScreen({ navigation }) {
                     <Text style={styles.rollCell}>Boys</Text>
                     <Text style={styles.rollCell}>Girls</Text>
                   </View>
-                  <ScrollView style={{ flex: 1, width: '100%' }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                  <ScrollView ref={fsRoll.ref} contentContainerStyle={fsRoll.padStyle} style={{ flex: 1, width: '100%' }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                     {classRange(selectedSchool.minClass, selectedSchool.maxClass).map(c => (
                       <View key={c} style={styles.rollRow}>
                         <Text style={[styles.rollClass, { flex: 1 }]}>Class {c}</Text>
                         {rollEdit ? (
                           <>
-                            <TextInput style={styles.rollInput} keyboardType="numeric" maxLength={3}
+                            <TextInput onFocus={fsRoll.onFocus} style={styles.rollInput} keyboardType="numeric" maxLength={3}
                               value={rollForm[c]?.b ?? ''} onChangeText={v => setRollField(c, 'b', v)} />
-                            <TextInput style={styles.rollInput} keyboardType="numeric" maxLength={3}
+                            <TextInput onFocus={fsRoll.onFocus} style={styles.rollInput} keyboardType="numeric" maxLength={3}
                               value={rollForm[c]?.g ?? ''} onChangeText={v => setRollField(c, 'g', v)} />
                           </>
                         ) : (
@@ -859,7 +919,7 @@ export default function ReceiptScreen({ navigation }) {
                         <IconText icon="pencil-outline" size={16} color={Colors.textSecondary} style={styles.cancelBtnText}>Update</IconText>
                       </TouchableOpacity>
                     )}
-                    <TouchableOpacity style={styles.confirmBtn} onPress={proceedWithRoll}>
+                    <TouchableOpacity style={styles.confirmBtn} onPress={() => proceedWithRoll()}>
                       <Text style={styles.confirmBtnText}>Proceed ›</Text>
                     </TouchableOpacity>
                   </>
@@ -908,7 +968,7 @@ export default function ReceiptScreen({ navigation }) {
                     {hasRoll && p ? `అవసరం ${p.required} · ఇచ్చినవి ${p.given} · మిగిలినవి ${Math.max(0, p.required - p.given)}\n` : ''}
                     ప్రతి size కి ఎన్ని ఇస్తున్నారో ఇవ్వండి (Return కి -)
                   </Text>
-                  <ScrollView style={{ flex: 1, width: '100%' }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                  <ScrollView ref={fsSize.ref} contentContainerStyle={fsSize.padStyle} style={{ flex: 1, width: '100%' }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                     {it.sizeList.map(s => {
                       const avail = sizeAvail(it.id, s);
                       const n = parseInt(sizeDraft[s], 10);
@@ -922,7 +982,7 @@ export default function ReceiptScreen({ navigation }) {
                           <TouchableOpacity style={styles.stepBtn} onPress={() => stepDraftSize(it.id, s, -1)}>
                             <Text style={styles.stepBtnText}>−</Text>
                           </TouchableOpacity>
-                          <TextInput
+                          <TextInput onFocus={fsSize.onFocus}
                             style={[styles.sizeInput, over && { borderColor: Colors.danger }]}
                             value={String(sizeDraft[s] ?? '')}
                             onChangeText={v => setDraftSize(s, v)}
@@ -946,6 +1006,36 @@ export default function ReceiptScreen({ navigation }) {
                 </View>
               );
             })()}
+          </View>
+        </Modal>
+
+        {/* Kinds popup (Textbooks / Kits / Shoes: only the chosen kinds are shown in this receipt) */}
+        <Modal visible={kindModal} animationType="fade" transparent onRequestClose={() => setKindModal(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.copiesModal, sheetPad]}>
+              <IconText icon="filter-variant" size={22} color={Colors.primaryDark} style={styles.modalTitle}>ఏ items ఇస్తున్నారు?</IconText>
+              <Text style={styles.copiesLabel}>ఈ receipt లో కావలసినవి tick చేయండి (ఈ school కి వర్తించేవి ముందే tick అయ్యాయి)</Text>
+              <View style={styles.kindCol}>
+                {kindsPresent.map(cat => {
+                  const on = kindDraft.includes(cat);
+                  return (
+                    <TouchableOpacity key={cat} style={[styles.kindBtn, on && styles.semBtnActive]} activeOpacity={0.8}
+                      onPress={() => setKindDraft(on ? kindDraft.filter(k => k !== cat) : [...kindDraft, cat])}>
+                      <MaterialCommunityIcons name={on ? 'checkbox-marked' : 'checkbox-blank-outline'} size={22} color={on ? Colors.primaryText : Colors.primary} />
+                      <Text style={[styles.semBtnText, on && styles.semBtnTextActive]}>{cat}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setKindModal(false)}>
+                  <Text style={styles.cancelBtnText}>Close</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.confirmBtn, kindDraft.length === 0 && { opacity: 0.45 }]} disabled={kindDraft.length === 0} onPress={confirmKinds}>
+                  <Text style={styles.confirmBtnText}>కొనసాగించు</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
         </Modal>
 
@@ -1080,6 +1170,8 @@ const styles = StyleSheet.create({
   rollTotal: { marginTop: Spacing.sm, fontSize: 13, fontWeight: '700', color: Colors.primary },
   semRow:           { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm, marginBottom: Spacing.sm },
   semBtn:           { flex: 1, minWidth: '40%', padding: Spacing.md, borderRadius: Radius.md, alignItems: 'center', borderWidth: 1.5, borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
+  kindCol:          { width: '100%', gap: Spacing.sm, marginBottom: Spacing.sm },
+  kindBtn:          { width: '100%', flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1.5, borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
   semBtnActive:     { backgroundColor: Colors.primary },
   semBtnText:       { fontSize: 15, fontWeight: '800', color: Colors.primary },
   semBtnTextActive: { color: Colors.primaryText },

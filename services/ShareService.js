@@ -22,9 +22,10 @@ class ShareService {
   // Build HTML version of the receipt.
   // Layout: A4 page (595 x 842 px @72 PPI) = two identical A5 halves (top / bottom, dashed cut line).
   // A long receipt continues on the next page; every page again holds the same part twice.
-  buildReceiptHTML({ settings, school, spell, items, totalQty, invoiceNo }) {
+  // when (Date) and duplicate (bool) are optional: used when an OLD receipt is shared again from History
+  buildReceiptHTML({ settings, school, spell, items, totalQty, invoiceNo, when, duplicate }) {
     const mandal   = settings?.shopName || 'Mandal';
-    const now      = new Date();
+    const now      = when instanceof Date && !isNaN(when) ? when : new Date();
     const dateStr  = now.toLocaleDateString();
     const timeStr  = now.toLocaleTimeString();
 
@@ -73,6 +74,7 @@ class ShareService {
             <div class="meta">
               ${invoiceNo ? `<div><strong>Invoice : ${esc(invoiceNo)}</strong></div>` : ''}
               <div>Date : ${dateStr} &nbsp; ${timeStr}</div>
+              ${duplicate ? '<div><strong>DUPLICATE COPY</strong></div>' : ''}
               <div><strong>Spell ${esc(spell)}</strong>${chunks.length > 1 ? ` &nbsp; (${idx + 1}/${chunks.length})` : ''}</div>
             </div>
           </div>
